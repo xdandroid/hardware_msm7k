@@ -110,13 +110,15 @@ write_int(char const* path, int value)
         int bytes = sprintf(buffer, "%d\n", value);
         int amt = write(fd, buffer, bytes);
         close(fd);
-        return amt == -1 ? -errno : 0;
+        //return amt == -1 ? -errno : 0;
+	return 0;
     } else {
         if (already_warned == 0) {
             LOGE("write_int failed to open %s\n", path);
             already_warned = 1;
         }
-        return -errno;
+        //return -errno;
+	return 0;
     }
 }
 
