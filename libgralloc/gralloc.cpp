@@ -43,7 +43,7 @@
 /*****************************************************************************/
 
 // NOTE: must be the same than in oem.h
-#define ALLOCATORREGION_RESERVED_SIZE           (1200<<10)
+#define ALLOCATORREGION_RESERVED_SIZE           (2400<<10)
 #define FB_ARENA                                HW3D_EBI
 
 
