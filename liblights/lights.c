@@ -44,6 +44,7 @@ static int g_trackball = -1;
 static int g_buttons = 0;
 static int g_attention = 0;
 static int g_haveAmberLed = 0;
+static int g_brightnessMode = 0;
 
 char const*const TRACKBALL_FILE
         = "/sys/class/leds/jogball-backlight/brightness";
@@ -80,6 +81,9 @@ char const*const KEYBOARD_FILE
 
 char const*const BUTTON_FILE
         = "/sys/class/leds/button-backlight/brightness";
+
+char const*const LS_FILE
+	= "/dbgfs/micropklt_dbg/auto_backlight";
 
 /**
  * device methods
@@ -162,6 +166,13 @@ set_light_backlight(struct light_device_t* dev,
     int brightness = rgb_to_brightness(state);
     pthread_mutex_lock(&g_lock);
     g_backlight = brightness;
+    LOGV("set_light_backlight state.brightnessMode=%d g_brightnessMode=%d", state->brightnessMode, g_brightnessMode);
+    if (g_brightnessMode != state->brightnessMode)
+    {
+	g_brightnessMode = state->brightnessMode;
+	write_int(LS_FILE, state->brightnessMode);
+    }
+    write_int(LS_FILE, state->brightnessMode);
     err = write_int(LCD_FILE, brightness);
     if (g_haveTrackballLight) {
         handle_trackball_light_locked(dev);
