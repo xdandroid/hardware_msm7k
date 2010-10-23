@@ -166,7 +166,6 @@ set_light_backlight(struct light_device_t* dev,
     int brightness = rgb_to_brightness(state);
     pthread_mutex_lock(&g_lock);
     g_backlight = brightness;
-    LOGV("set_light_backlight state.brightnessMode=%d g_brightnessMode=%d", state->brightnessMode, g_brightnessMode);
     if (g_brightnessMode != state->brightnessMode)
     {
 	g_brightnessMode = state->brightnessMode;
