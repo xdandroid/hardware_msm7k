@@ -166,13 +166,17 @@ set_light_backlight(struct light_device_t* dev,
     int brightness = rgb_to_brightness(state);
     pthread_mutex_lock(&g_lock);
     g_backlight = brightness;
-    if (g_brightnessMode != state->brightnessMode)
-    {
-	g_brightnessMode = state->brightnessMode;
-	write_int(LS_FILE, state->brightnessMode);
+
+    if (g_brightnessMode != state->brightnessMode) {
+        g_brightnessMode = state->brightnessMode;
+        LOGD("Switched brightnessMode=%d brightness=%d\n",g_brightnessMode,
+            brightness);
+        write_int(LS_FILE, state->brightnessMode);
     }
-    else
-    {
+    // if we switched to user mode, allow for setting the backlight immedeately
+    if (g_brightnessMode == BRIGHTNESS_MODE_USER){
+        LOGD("Setting brightnessMode=%d brightness=%d\n", g_brightnessMode,
+            brightness);
         err = write_int(LCD_FILE, brightness);
         if (g_haveTrackballLight) {
             handle_trackball_light_locked(dev);
