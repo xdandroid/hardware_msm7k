@@ -320,6 +320,29 @@ bool QualcommCameraHardware::msgTypeEnabled(int32_t msgType)
 }
 
 
+extern "C" int HAL_getNumberOfCameras()
+{
+    //return sizeof(sCameraInfo) / sizeof(sCameraInfo[0]);
+    return 1;
+}
+
+extern "C" void HAL_getCameraInfo(int cameraId, struct CameraInfo* cameraInfo)
+{
+    static CameraInfo sCameraInfo[] = {
+        {
+            CAMERA_FACING_BACK,
+            90,  /* orientation */
+        }
+    };
+    memcpy(cameraInfo, &sCameraInfo[cameraId], sizeof(CameraInfo));
+}
+
+extern "C" sp<CameraHardwareInterface> HAL_openCameraHardware(int cameraId)
+{
+    LOGV("openCameraHardware: call createInstance");
+    return QualcommCameraHardware::createInstance();
+}
+
 #define ROUND_TO_PAGE(x)  (((x)+0xfff)&~0xfff)
 
 void QualcommCameraHardware::startCamera()
