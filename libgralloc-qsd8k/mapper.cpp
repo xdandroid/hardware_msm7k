@@ -171,7 +171,8 @@ int terminateBuffer(gralloc_module_t const* module,
 
     if (hnd->lockState & private_handle_t::LOCK_STATE_MAPPED) {
         // this buffer was mapped, unmap it now
-        if (hnd->flags & private_handle_t::PRIV_FLAGS_USES_PMEM) {
+        if ((hnd->flags & private_handle_t::PRIV_FLAGS_USES_PMEM) ||
+            (hnd->flags & private_handle_t::PRIV_FLAGS_USES_PMEM_ADSP)) {
             if (hnd->pid != getpid()) {
                 // ... unless it's a "master" pmem buffer, that is a buffer
                 // mapped in the process it's been allocated.
@@ -237,8 +238,14 @@ int gralloc_lock(gralloc_module_t const* module,
 
     // if requesting sw write for non-framebuffer handles, flag for
     // flushing at unlock
+
+    const uint32_t pmemMask =
+            private_handle_t::PRIV_FLAGS_USES_PMEM |
+            private_handle_t::PRIV_FLAGS_USES_PMEM_ADSP;
+
     if ((usage & GRALLOC_USAGE_SW_WRITE_MASK) &&
-        !(hnd->flags & private_handle_t::PRIV_FLAGS_FRAMEBUFFER)) {
+            (hnd->flags & pmemMask) &&
+            !(hnd->flags & private_handle_t::PRIV_FLAGS_FRAMEBUFFER)) {
         hnd->flags |= private_handle_t::PRIV_FLAGS_NEEDS_FLUSH;
     }
 

@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <stdlib.h>
 
 #include <hardware_legacy/power.h>
 
@@ -221,7 +222,11 @@ static void *rx_context(void *__u __attribute__((unused)))
                     D("%08x:%08x reading data.\n",
                       client->xdr->x_prog, client->xdr->x_vers);
                     grabPartialWakeLock();
-                    client->xdr->xops->read(client->xdr);
+                    if (client->xdr->xops->read(client->xdr) == 0) {
+                        E("%08x:%08x ONCRPC read error: aborting!\n",
+                          client->xdr->x_prog, client->xdr->x_vers);
+                        abort();
+                    }
                     client->input_xdr_busy = 1;
                     pthread_mutex_unlock(&client->input_xdr_lock);
 
@@ -513,14 +518,12 @@ bool_t xdr_recv_reply_header (xdr_s_type *xdr, rpc_reply_header *reply)
 
     switch ((*reply).stat) {
     case RPC_MSG_ACCEPTED:
-        if (!xdr_recv_accepted_reply_header(xdr, &reply->u.ar)) {
+        if (!xdr_recv_accepted_reply_header(xdr, &reply->u.ar))
             return FALSE;
-    }
         break;
     case RPC_MSG_DENIED:
-        if (!xdr_recv_denied_reply(xdr, &reply->u.dr)) {
+        if (!xdr_recv_denied_reply(xdr, &reply->u.dr))
             return FALSE;
-    }
         break;
     default:
         return FALSE;
