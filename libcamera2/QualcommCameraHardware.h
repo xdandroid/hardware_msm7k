@@ -31,22 +31,82 @@ extern "C" {
 #define MSM_CAMERA_CONTROL "/dev/msm_camera/control0"
 #define JPEG_EVENT_DONE 0 /* guess */
 
+#define TRUE 1
+#define FALSE 0
+
 #define CAM_CTRL_SUCCESS 1
 
-#define CAMERA_SET_PARM_DIMENSION 1
-#define CAMERA_SET_PARM_WB 14
-#define CAMERA_SET_PARM_EFFECT 15
-#define CAMERA_SET_PARM_ANTIBANDING 21
-#define CAMERA_STOP_PREVIEW 38
-#define CAMERA_START_PREVIEW 39
-#define CAMERA_EXIT 43
+/* TAG JB 01/20/2010 : From the disassembly of both drem/sapphire + legend camera libraries */
+#define CAMERA_SET_PARM_DIMENSION           1
+#define CAMERA_SET_PARM_ZOOM                2
+#define CAMERA_SET_PARM_SENSOR_POSITION     3   // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_FOCUS_RECT          4   // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_LUMA_ADAPTATION     5   // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_CONTRAST            6
+#define CAMERA_SET_PARM_BRIGHTNESS          7
+#define CAMERA_SET_PARM_EXPOSURE_COMPENSATION   8   // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_SHARPNESS           9   // (4) from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_HUE                 10  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_SATURATION          11
+#define CAMERA_SET_PARM_EXPOSURE            12
+#define CAMERA_SET_PARM_AUTO_FOCUS          13
+#define CAMERA_SET_PARM_WB                  14
+#define CAMERA_SET_PARM_EFFECT              15
+#define CAMERA_SET_PARM_FPS                 16  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_FLASH               17  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_NIGHTSHOT_MODE      18  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_REFLECT             19  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_PREVIEW_MODE        20  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_ANTIBANDING         21
+#define CAMERA_SET_PARM_RED_EYE_REDUCTION   22  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_FOCUS_STEP          23  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_EXPOSURE_METERING   24  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_AUTO_EXPOSURE_MODE  25  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_ISO                 26
+#define CAMERA_SET_PARM_BESTSHOT_MODE       27  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_PREVIEW_FPS         29  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_AF_MODE             30  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_HISTOGRAM           31  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_FLASH_STATE         32  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_FRAME_TIMESTAMP     33  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_STROBE_FLASH        34  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_FPS_LIST            35  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_HJR                 36
+#define CAMERA_SET_PARM_ROLLOFF             37
+#define CAMERA_STOP_PREVIEW                 38
+#define CAMERA_START_PREVIEW                39
+#define CAMERA_START_SNAPSHOT               40
+#define CAMERA_START_RAW_SNAPSHOT           41
+#define CAMERA_STOP_SNAPSHOT                42
+#define CAMERA_EXIT                         43
+#define CAMERA_GET_PARM_ZOOM                46  // from liboemcamera.so (307Kb version) disassembly
+#define CAMERA_GET_PARM_MAXZOOM             47
+#define CAMERA_GET_PARM_AF_SHARPNESS        48  // from liboemcamera.so disassembly
+#define CAMERA_SET_PARM_LED_MODE            49
+#define CAMERA_SET_MOTION_ISO               50  // from liboemcamera.so disassembly
+#define CAMERA_AUTO_FOCUS_CANCEL            51  // (38) from liboemcamera.so disassembly
+#define CAMERA_GET_PARM_FOCUS_STEP          52  // from liboemcamera.so (1535Kb version) disassembly
+#define CAMERA_ENABLE_AFD                   53  // from liboemcamera.so (1535Kb version) disassembly
+#define CAMERA_PREPARE_SNAPSHOT             54
+#define CAMERA_SET_PARM_COORDINATE          55  // from liboemcamera.so (1535Kb version) disassembly
+#define CAMERA_SET_AWB_CALIBRATION          56  // from liboemcamera.so (1535Kb version) disassembly
+#define CAMERA_SET_PARM_LA_MODE             57  // from liboemcamera.so (1535Kb version) disassembly
+#define CAMERA_SET_PARM_AE_COORDINATE       58  // from liboemcamera.so (1535Kb version) disassembly
+#define CAMERA_GET_PARM_FOCAL_LENGTH        59  // from liboemcamera.so (1535Kb version) disassembly
+#define CAMERA_GET_PARM_HORIZONTAL_VIEW_ANGLE 60  // from liboemcamera.so (1535Kb version) disassembly
+#define CAMERA_GET_PARM_VERTICAL_VIEW_ANGLE 61  // from liboemcamera.so (1535Kb version) disassembly
+#define CAMERA_GET_PARM_ISO                 62
+#define CAMERA_SET_PARM_FRONT_CAMERA_MODE   63  // from liboemcamera.so (1535Kb version) disassembly
 
-#define CAMERA_SET_PARM_AUTO_FOCUS 13
-#define CAMERA_START_SNAPSHOT 40
-#define CAMERA_STOP_SNAPSHOT 41 /* guess, but likely based on previos ording */
+#define CAMERA_START_VIDEO                  56
+#define CAMERA_STOP_VIDEO                   57
+#define CAMERA_START_RECORDING              58
+#define CAMERA_STOP_RECORDING               59
+/* End of TAG */
 
+#define PAD_TO_WORD(x) ((x&1) ? x+1 : x)
 #define AF_MODE_AUTO 2
-#define CAMERA_AUTO_FOCUS_CANCEL 1 //204
+//#define CAMERA_AUTO_FOCUS_CANCEL 1 //204
 
 typedef enum
 {
@@ -90,6 +150,13 @@ typedef enum
     CAMERA_MAX_ANTIBANDING,
 } camera_antibanding_type;
 
+typedef enum
+{
+	LED_MODE_OFF,
+	LED_MODE_ON,
+	LED_MODE_AUTO,
+} flash_led_type;
+
 typedef struct
 {
     uint32_t timestamp;  /* seconds since 1/6/1980          */
@@ -111,23 +178,79 @@ typedef struct
     uint8_t update_flag; 
 } common_crop_t;
 
+/* TAG JB 01/20/2010 : Dual library support */
+typedef unsigned int exif_tag_id_t;
+enum {
+	EXIFTAGID_GPS_LATITUDE	= 0x20002,
+	EXIFTAGID_GPS_LONGITUDE	= 0x40004,
+};
+#define EXIF_RATIONAL 5
+#define EXIF_ASCII 2
+#define EXIF_BYTE 1
+typedef unsigned int exif_tag_type_t;
+typedef struct {
+	//24 bytes = 6 ints
+	exif_tag_type_t type;
+	uint32_t count;
+	uint32_t copy;
+	uint32_t junk1;
+	uint32_t junk2;
+	uint32_t junk3;
+} exif_tag_entry_t;
+
+typedef struct {
+	exif_tag_id_t tagid;
+	exif_tag_entry_t tag_entry;
+} exif_tags_info_t;
+/* end of TAG */
+
+#define CEILING16(x) (x&0xfffffff0)
+
+typedef struct {
+	//Size: 0x20 bytes = 32 bytes = 16 short
+	unsigned short video_width;//0x2da0
+	unsigned short video_height;//0x2da2
+	unsigned short picture_width; //0x2da4
+	unsigned short picture_height;//0x2da6
+	unsigned short display_width; //0x2da8
+	unsigned short display_height; //0x2daa
+	unsigned short orig_picture_dx;  //0x2dac
+	unsigned short orig_picture_dy; //0x2dae
+	unsigned short ui_thumbnail_width; //0x2db0
+	unsigned short ui_thumbnail_height; //0x2db2
+	unsigned short thumbnail_width;  //0x2db4
+	unsigned short thumbnail_height;  //0x2db6
+	unsigned short raw_picture_height; //0x2db8
+	unsigned short raw_picture_width;  //0x2dba
+	unsigned short filler7;   ///0x2dbc
+	unsigned short filler8;   //0x2dbe
+} cam_ctrl_dimension_t;
+
+/* TAG JB 01/20/2010 : Dual library support */
 typedef struct
 {
-    unsigned short picture_width;
-    unsigned short picture_height;
-    unsigned short display_width;
-    unsigned short display_height;
-    unsigned short filler;
-    unsigned short filler2;
-    unsigned short ui_thumbnail_height;
-    unsigned short ui_thumbnail_width;
-    unsigned short filler3;
-    unsigned short filler4;
-    unsigned short filler5;
-    unsigned short filler6;
-    unsigned short filler7;
-    unsigned short filler8;
-} cam_ctrl_dimension_t;
+union {
+	unsigned short video_width;//0x2df8
+	unsigned short picture_width; //0x2df8
+};
+union {
+	unsigned short video_height;//0x2dfa
+	unsigned short picture_height;//0x2dfa
+};
+	unsigned short display_width; //0x2dfc
+	unsigned short display_height; //0x2e00
+	unsigned short orig_picture_dx;  //0x2e02
+	unsigned short orig_picture_dy; //0x2e04
+	unsigned short ui_thumbnail_width; //0x2e06
+	unsigned short ui_thumbnail_height; //0x2e08
+	unsigned short thumbnail_width;  //0x2e0a
+	unsigned short thumbnail_height;  //0x2e0c
+	unsigned short raw_picture_height; //0x2e0e
+	unsigned short raw_picture_width;  //0x2e10
+	unsigned short filler7;   ///0x2e12
+	unsigned short filler8;   //0x2e14
+} cam_ctrl_dimension_t_basic;
+/* End of TAG */
 
 typedef uint8_t cam_ctrl_type;
 typedef uint8_t jpeg_event_t;
@@ -203,6 +326,8 @@ private:
     static const int kRawBufferCount = 1;
     static const int kJpegBufferCount = 1;
 
+    int jpegPadding;
+
     //TODO: put the picture dimensions in the CameraParameters object;
     CameraParameters mParameters;
     int mPreviewHeight;
@@ -220,7 +345,6 @@ private:
     struct MemPool : public RefBase {
         MemPool(int buffer_size, int num_buffers,
                 int frame_size,
-                int frame_offset,
                 const char *name);
 
         virtual ~MemPool() = 0;
@@ -233,9 +357,9 @@ private:
         virtual status_t dump(int fd, const Vector<String16>& args) const;
 
         int mBufferSize;
+        int mAlignedBufferSize;
         int mNumBuffers;
         int mFrameSize;
-        int mFrameOffset;
         sp<MemoryHeapBase> mHeap;
         sp<MemoryBase> *mBuffers;
 
@@ -245,30 +369,36 @@ private:
     struct AshmemPool : public MemPool {
         AshmemPool(int buffer_size, int num_buffers,
                    int frame_size,
-                   int frame_offset,
                    const char *name);
     };
 
     struct PmemPool : public MemPool {
         PmemPool(const char *pmem_pool,
-                 int control_camera_fd, int pmem_type,
+                 int control_camera_fd, int flags, int pmem_type,
                  int buffer_size, int num_buffers,
-                 int frame_size, int frame_offset,
-                 const char *name);
+                 int frame_size, int cbcr_offset,
+                 int yoffset, const char *name);
         virtual ~PmemPool();
         int mFd;
         int mPmemType;
+        int mCbCrOffset;
+        int myOffset;
         int mCameraControlFd;
         uint32_t mAlignedSize;
         struct pmem_region mSize;
     };
 
     sp<PmemPool> mPreviewHeap;
+    sp<PmemPool> mRecordHeap;
     sp<PmemPool> mThumbnailHeap;
     sp<PmemPool> mRawHeap;
+    sp<PmemPool> mDisplayHeap;
     sp<AshmemPool> mJpegHeap;
+    sp<PmemPool> mRawSnapShotPmemHeap;
+    sp<AshmemPool> mRawSnapshotAshmemHeap;
+    sp<PmemPool> mPostViewHeap;
 
-    void startCamera();
+    bool startCamera();
     bool initPreview();
     void deinitPreview();
     bool initRaw(bool initJpegHeap);
@@ -290,10 +420,25 @@ private:
     void runSnapshotThread(void *data);
 
     void initDefaultParameters();
+    /* TAG JB 01/21/2010 : Sensor dependant parameters */
+    void filterPictureSizes();
+    void findSensorType();
+    /* End of TAG */
 
-    void setAntibanding();
-    void setEffect();
-    void setWhiteBalance();
+    /* TAG JB 01/21/2010 : Enhancement */    
+    status_t setPreviewSize(const CameraParameters& params);
+    status_t setJpegThumbnailSize(const CameraParameters& params);
+    status_t setPictureSize(const CameraParameters& params);
+    status_t setAntibanding(const CameraParameters& params);
+    status_t setEffect(const CameraParameters& params);
+    status_t setWhiteBalance(const CameraParameters& params);
+    status_t setFlash(const CameraParameters& params);
+    bool isValidDimension(int w, int h);
+    /* End of TAG */
+    
+    /* TAG JB 01/21/2010 : Zoom */
+    status_t setZoom(const CameraParameters& params);
+    /* End of TAG */
 
     Mutex mLock;
     bool mReleasedRecordingFrame;
@@ -328,12 +473,13 @@ private:
 #endif
 
     int mCameraControlFd;
+    struct msm_camsensor_info mSensorInfo;
     cam_ctrl_dimension_t mDimension;
     bool mAutoFocusThreadRunning;
     Mutex mAutoFocusThreadLock;
     int mAutoFocusFd;
 
-    pthread_t mCamConfigThread;
+
     pthread_t mFrameThread;
     pthread_t mSnapshotThread;
 
@@ -342,6 +488,10 @@ private:
     struct msm_frame frames[kPreviewBufferCount];
     bool mInPreviewCallback;
     bool mCameraRecording;
+
+    /* TAG JB 01/20/2010 : New memory management + mdp zoom */
+    int kPreviewBufferCountActual;
+    /* End of TAG */
 };
 
 }; // namespace android
