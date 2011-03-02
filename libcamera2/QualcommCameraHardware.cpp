@@ -14,7 +14,7 @@
 ** limitations under the License.
 */
 
-//#define LOG_NDEBUG 0
+#define LOG_NDEBUG 0
 //#define DEBUG_CFGCTRL
 #define LOG_TAG "QualcommCameraHardware"
 #include <utils/Log.h>
@@ -92,8 +92,7 @@ bool  (*LINK_jpeg_encoder_encode)(const cam_ctrl_dimension_t *dimen,
 bool  (*LINK_jpeg_encoder_encode_basic)(const cam_ctrl_dimension_t_basic *dimen,
                                   const uint8_t *thumbnailbuf, int thumbnailfd,
                                   const uint8_t *snapshotbuf, int snapshotfd,
-                                  common_crop_t *scaling_parms, exif_tags_info_t *exif_data,
-                                  int exif_table_numEntries, int jpegPadding);
+                                  common_crop_t *scaling_parms);
 /* End of TAG */
 int  (*LINK_camframe_terminate)(void);
 int8_t (*LINK_jpeg_encoder_setMainImageQuality)(uint32_t quality);
@@ -109,6 +108,9 @@ void  (**LINK_mmcamera_jpegfragment_callback)(uint8_t *buff_ptr,
                                               uint32_t buff_size);
 void  (**LINK_mmcamera_jpeg_callback)(jpeg_event_t status);
 void  (**LINK_mmcamera_shutter_callback)();
+/* TAG JB 02/24/2010 : New lib + Zoom */
+void  (**LINK_mmcamera_shutter_callback_new)(common_crop_t *crop);
+/* End of TAG */
 
 /* TAG JB 01/20/2010 : Dual library support */
 
@@ -314,6 +316,9 @@ static void receive_camframe_callback(struct msm_frame *frame);
 static void receive_jpeg_fragment_callback(uint8_t *buff_ptr, uint32_t buff_size);
 static void receive_jpeg_callback(jpeg_event_t status);
 static void receive_shutter_callback();
+/* TAG JB 02/24/2010 : New lib + Zoom */
+static void receive_shutter_callback_new(common_crop_t *crop);
+/* End of TAG */
 
 /* TAG JB 01/21/2010 : Sensor dependant parameters */
 
@@ -462,21 +467,21 @@ pthread_t w_thread;
 static void receive_vfe_stop_ack_callback(void* data);
 
 static void cam_ctrl_dimension_convert(
-        cam_ctrl_dimension_t mDimensionIn, cam_ctrl_dimension_t_basic mDimensionOut){
-    mDimensionOut.picture_width = mDimensionIn.picture_width;
-    mDimensionOut.picture_height = mDimensionIn.picture_height;
-    mDimensionOut.display_width = mDimensionIn.display_width;
-    mDimensionOut.display_height = mDimensionIn.display_height;
-    mDimensionOut.orig_picture_dx = mDimensionIn.orig_picture_dx;
-    mDimensionOut.orig_picture_dy = mDimensionIn.orig_picture_dy;
-    mDimensionOut.ui_thumbnail_width = mDimensionIn.ui_thumbnail_width;
-    mDimensionOut.ui_thumbnail_height = mDimensionIn.ui_thumbnail_height;
-    mDimensionOut.thumbnail_width = mDimensionIn.thumbnail_width;
-    mDimensionOut.thumbnail_height = mDimensionIn.thumbnail_height;
-    mDimensionOut.raw_picture_height = mDimensionIn.raw_picture_height;
-    mDimensionOut.raw_picture_width = mDimensionIn.raw_picture_width;
-    mDimensionOut.filler7 = mDimensionIn.filler7;
-    mDimensionOut.filler8 = mDimensionIn.filler8;
+        cam_ctrl_dimension_t mDimensionIn, cam_ctrl_dimension_t_basic *mDimensionOut){
+    mDimensionOut->picture_width = mDimensionIn.picture_width;
+    mDimensionOut->picture_height = mDimensionIn.picture_height;
+    mDimensionOut->display_width = mDimensionIn.display_width;
+    mDimensionOut->display_height = mDimensionIn.display_height;
+    mDimensionOut->orig_picture_dx = mDimensionIn.orig_picture_dx;
+    mDimensionOut->orig_picture_dy = mDimensionIn.orig_picture_dy;
+    mDimensionOut->ui_thumbnail_width = mDimensionIn.ui_thumbnail_width;
+    mDimensionOut->ui_thumbnail_height = mDimensionIn.ui_thumbnail_height;
+    mDimensionOut->thumbnail_width = mDimensionIn.thumbnail_width;
+    mDimensionOut->thumbnail_height = mDimensionIn.thumbnail_height;
+    mDimensionOut->raw_picture_height = mDimensionIn.raw_picture_height;
+    mDimensionOut->raw_picture_width = mDimensionIn.raw_picture_width;
+    mDimensionOut->filler7 = mDimensionIn.filler7;
+    mDimensionOut->filler8 = mDimensionIn.filler8;
 }
 /* End of TAG */
 
@@ -690,7 +695,7 @@ void QualcommCameraHardware::initDefaultParameters()
     if(native_get_maxzoom(mCameraControlFd, (void *)&mMaxZoom) == true){
         LOGD("Maximum zoom value is %d", mMaxZoom);
         zoomSupported = true;
-        if(mMaxZoom > 0){
+        if((mMaxZoom > 0) && (liboemcamera_version != BASIC_LIB) ){
             //TODO : if max zoom is available find the zoom ratios
             int16_t * zoomRatios = new int16_t[mMaxZoom+1];
             for (int i=0; i<(mMaxZoom+1); i++) {    
@@ -720,6 +725,7 @@ void QualcommCameraHardware::initDefaultParameters()
         mParameters.set(CameraParameters::KEY_ZOOM_RATIOS, zoom_ratio_values);
         mParameters.set(CameraParameters::KEY_ZOOM, 0);
     } else {
+        mParameters.set(CameraParameters::KEY_MAX_ZOOM, 0);
         mParameters.set(CameraParameters::KEY_ZOOM_SUPPORTED, "false");
     }
     /* End of TAG zoom */
@@ -745,6 +751,10 @@ void QualcommCameraHardware::initDefaultParameters()
     if (setParameters(mParameters) != NO_ERROR) {
         LOGE("Failed to set default parameters?!");
     }
+
+/* Tag JB 02/25/2001 : zoom postview image fix */
+    jpegPadding = 0;
+/* End of TAG */
 
     LOGV("initDefaultParameters X");
 }
@@ -883,10 +893,15 @@ bool QualcommCameraHardware::startCamera()
 
     *LINK_mmcamera_jpeg_callback = receive_jpeg_callback;
 
-    *(void **)&LINK_mmcamera_shutter_callback =
-        ::dlsym(libmmcamera, "mmcamera_shutter_callback");
-
-    *LINK_mmcamera_shutter_callback = receive_shutter_callback;
+    if ( liboemcamera_version == NEW_LIB ) {
+        *(void **)&LINK_mmcamera_shutter_callback_new =
+            ::dlsym(libmmcamera, "mmcamera_shutter_callback");
+        *LINK_mmcamera_shutter_callback_new = receive_shutter_callback_new;
+    } else {
+        *(void **)&LINK_mmcamera_shutter_callback =
+            ::dlsym(libmmcamera, "mmcamera_shutter_callback");
+        *LINK_mmcamera_shutter_callback = receive_shutter_callback;
+    }
 
     *(void**)&LINK_jpeg_encoder_setMainImageQuality =
         ::dlsym(libmmcamera, "jpeg_encoder_setMainImageQuality");
@@ -1243,14 +1258,13 @@ bool QualcommCameraHardware::native_jpeg_encode(void)
 
     if ( liboemcamera_version == BASIC_LIB ) {
         cam_ctrl_dimension_t_basic mDimensionBasic;
-        cam_ctrl_dimension_convert(mDimension, mDimensionBasic);
+        cam_ctrl_dimension_convert(mDimension, &mDimensionBasic);
         if (!LINK_jpeg_encoder_encode_basic(&mDimensionBasic,
                                       thumbnailHeap,
                                       thumbfd,
                                       (uint8_t *)mRawHeap->mHeap->base(),
                                       mRawHeap->mHeap->getHeapID(),
-                                      &mCrop, exif_data, exif_table_numEntries,
-                                      jpegPadding/2)) {
+                                      &mCrop)) {
             LOGE("native_jpeg_encode: jpeg_encoder_encode failed.");
             return false;
         }    
@@ -1551,12 +1565,16 @@ bool QualcommCameraHardware::initRaw(bool initJpegHeap)
     int CbCrOffsetThumb = PAD_TO_WORD(mDimension.ui_thumbnail_width *
                           mDimension.ui_thumbnail_height);
     /* End of TAG */
-    mDimension.picture_width   = mRawWidth;
-    mDimension.picture_height  = mRawHeight;
-    mRawSize = mRawWidth * mRawHeight * 3 / 2;
-    mJpegMaxSize = mRawWidth * mRawHeight * 3 / 2;
-
-    if(!native_set_dimension(&mDimension)) {
+    bool ret;
+    if ( liboemcamera_version == BASIC_LIB ) {
+        ret = native_set_parm(CAMERA_SET_PARM_DIMENSION,
+                    sizeof(cam_ctrl_dimension_t_basic), &mDimension.picture_width);
+    } else {
+        ret = native_set_parm(CAMERA_SET_PARM_DIMENSION,
+                    sizeof(cam_ctrl_dimension_t), &mDimension);
+    }
+    
+    if(!ret) {
         LOGE("initRaw X: failed to set dimension");
         return false;
     }
@@ -1668,6 +1686,7 @@ void QualcommCameraHardware::deinitRaw()
     mThumbnailHeap.clear();
     mJpegHeap.clear();
     mRawHeap.clear();
+    mDisplayHeap.clear();
 
     LOGV("deinitRaw X");
 }
@@ -1700,6 +1719,11 @@ void QualcommCameraHardware::release()
     }
 
     LINK_jpeg_encoder_join();
+/* TAG JB 02/24/2011 : New lib + Zoom */
+    if ( liboemcamera_version == NEW_LIB ) {
+        Mutex::Autolock l (&mRawPictureHeapLock);
+    }
+/* Enod of TAG */
     deinitRaw();
 
     ctrlCmd.timeout_ms = 5000;
@@ -1745,7 +1769,10 @@ QualcommCameraHardware::~QualcommCameraHardware()
 sp<IMemoryHeap> QualcommCameraHardware::getRawHeap() const
 {
     LOGV("getRawHeap");
-    return mRawHeap != NULL ? mRawHeap->mHeap : NULL;
+/* Tag JB 02/25/2001 : zoom postview image fix */
+    return mDisplayHeap != NULL ? mDisplayHeap->mHeap : NULL;
+/* End of TAG */
+//    return mRawHeap != NULL ? mRawHeap->mHeap : NULL;
 }
 
 sp<IMemoryHeap> QualcommCameraHardware::getPreviewHeap() const
@@ -1979,6 +2006,10 @@ status_t QualcommCameraHardware::takePicture()
         LOGV("takePicture: old snapshot thread completed.");
     }
 
+/* Tag JB 02/25/2001 : zoom postview image fix */
+    mDisplayHeap = mThumbnailHeap;
+/* End of TAG */
+
     stopPreviewInternal();
 
     if (!initRaw(mMsgEnabled & CAMERA_MSG_COMPRESSED_IMAGE)) { /* not sure if this is right */
@@ -2038,8 +2069,10 @@ status_t QualcommCameraHardware::setParameters(
     mParameters = params;
 
     /* TAG JB 01/21/2010 : Zoom */
-    if ((rc = setZoom(params)))         final_rc = rc;
-    LOGV("setZoom rc %d", rc);
+    if ( liboemcamera_version == NEW_LIB ) {
+        if ((rc = setZoom(params)))         final_rc = rc;
+        LOGV("setZoom rc %d", rc);
+    }
    
 
     LOGV("setParameters: X");
@@ -2241,12 +2274,17 @@ bool QualcommCameraHardware::recordingEnabled()
 
 void QualcommCameraHardware::notifyShutter()
 {
-    mShutterLock.lock();
-    if (mShutterPending && (mMsgEnabled & CAMERA_MSG_SHUTTER)) {
-        mNotifyCb(CAMERA_MSG_SHUTTER, 0, 0, mCallbackCookie);
-        mShutterPending = false;
+    /* make sure we get into the correct notifyShutter function */
+    if ( liboemcamera_version == NEW_LIB ) {
+        notifyShutter_new(&mCrop, FALSE);
+    } else {
+        mShutterLock.lock();
+        if (mShutterPending && (mMsgEnabled & CAMERA_MSG_SHUTTER)) {
+            mNotifyCb(CAMERA_MSG_SHUTTER, 0, 0, mCallbackCookie);
+            mShutterPending = false;
+        }
+        mShutterLock.unlock();
     }
-    mShutterLock.unlock();
 }
 
 static void receive_shutter_callback()
@@ -2259,6 +2297,115 @@ static void receive_shutter_callback()
     LOGV("receive_shutter_callback: X");
 }
 
+/* TAG 02/24/2011 : New lib + Zoom */
+void QualcommCameraHardware::notifyShutter_new(common_crop_t *crop, bool mPlayShutterSoundOnly)
+{
+    mShutterLock.lock();
+    image_rect_type size;
+
+    LOGV("notifyShutter_new mPlayShutterSoundOnly %d, mShutterPending %d, mMsgEnabled & CAMERA_MSG_SHUTTER %d", 
+            mPlayShutterSoundOnly, mShutterPending, mMsgEnabled & CAMERA_MSG_SHUTTER);
+   
+    if(mPlayShutterSoundOnly) {
+        /* At this point, invoke Notify Callback to play shutter sound only.
+         * We want to call notify callback again when we have the
+         * yuv picture ready. This is to reduce blanking at the time
+         * of displaying postview frame. Using ext2 to indicate whether
+         * to play shutter sound only or register the postview buffers.
+         */
+        mNotifyCb(CAMERA_MSG_SHUTTER, 0, mPlayShutterSoundOnly,
+                            mCallbackCookie);
+        mShutterLock.unlock();
+        return;
+    }
+
+    if (mShutterPending && mNotifyCb && (mMsgEnabled & CAMERA_MSG_SHUTTER)) {
+        LOGV("out2_w=%d, out2_h=%d, in2_w=%d, in2_h=%d",
+             crop->out2_w, crop->out2_h, crop->in2_w, crop->in2_h);
+        LOGV("out1_w=%d, out1_h=%d, in1_w=%d, in1_h=%d",
+             crop->out1_w, crop->out1_h, crop->in1_w, crop->in1_h);
+
+        // To workaround a bug in MDP which happens if either
+        // dimension > 2048, we display the thumbnail instead.
+
+        mDisplayHeap = mRawHeap;
+
+        if (crop->in1_w == 0 || crop->in1_h == 0) {
+            // Full size
+            size.width = mDimension.picture_width;
+            size.height = mDimension.picture_height;
+            if (size.width > 2048 || size.height > 2048) {
+                size.width = mDimension.ui_thumbnail_width;
+                size.height = mDimension.ui_thumbnail_height;
+                mDisplayHeap = mThumbnailHeap;
+            }
+        } else {
+            // Cropped
+            size.width = (crop->in2_w + jpegPadding) & ~1;
+            size.height = (crop->in2_h + jpegPadding) & ~1;
+            if (size.width > 2048 || size.height > 2048) {
+                size.width = (crop->in1_w + jpegPadding) & ~1;
+                size.height = (crop->in1_h + jpegPadding) & ~1;
+                mDisplayHeap = mThumbnailHeap;
+            }
+        }
+        /* Now, invoke Notify Callback to unregister preview buffer
+         * and register postview buffer with surface flinger. Set ext2
+         * as 0 to indicate not to play shutter sound.
+         */
+        mNotifyCb(CAMERA_MSG_SHUTTER, (int32_t)&size, 0,
+                        mCallbackCookie);
+        mShutterPending = false;
+    }
+    mShutterLock.unlock();
+}
+
+static void receive_shutter_callback_new(common_crop_t *crop)
+{
+    LOGV("receive_shutter_callback_new: E");
+    sp<QualcommCameraHardware> obj = QualcommCameraHardware::getInstance();
+    if (obj != 0) {
+        /* Just play shutter sound at this time */
+        obj->notifyShutter_new(crop, TRUE);
+    }
+    LOGV("receive_shutter_callback_new: X");
+}
+
+
+// Crop the picture in place.
+static void crop_yuv420(uint32_t width, uint32_t height,
+                 uint32_t cropped_width, uint32_t cropped_height,
+                 uint8_t *image)
+{
+    uint32_t i, x, y;
+    uint8_t* chroma_src, *chroma_dst;
+
+    // Calculate the start position of the cropped area.
+    x = (width - cropped_width) / 2;
+    y = (height - cropped_height) / 2;
+    x &= ~1;
+    y &= ~1;
+
+    // Copy luma component.
+    for(i = 0; i < cropped_height; i++)
+        memcpy(image + i * cropped_width,
+               image + width * (y + i) + x,
+               cropped_width);
+
+    chroma_src = image + width * height;
+    chroma_dst = image + cropped_width * cropped_height;
+
+    // Copy chroma components.
+    cropped_height /= 2;
+    y /= 2;
+    for(i = 0; i < cropped_height; i++)
+        memcpy(chroma_dst + i * cropped_width,
+               chroma_src + width * (y + i) + x,
+               cropped_width);
+
+}
+/* End of TAG */
+
 void QualcommCameraHardware::receiveRawPicture()
 {
     LOGV("receiveRawPicture: E");
@@ -2269,10 +2416,62 @@ void QualcommCameraHardware::receiveRawPicture()
             return;
         }
 
-        // By the time native_get_picture returns, picture is taken. Call
-        // shutter callback if cam config thread has not done that.
-        notifyShutter();
-        mDataCb(CAMERA_MSG_RAW_IMAGE, mRawHeap->mBuffers[0], mCallbackCookie);
+/* TAG JB 02/24/2011 : New lib + Zoom */
+        if ( liboemcamera_version == NEW_LIB ) {
+            mCrop.in1_w &= ~1;
+            mCrop.in1_h &= ~1;
+            mCrop.in2_w &= ~1;
+            mCrop.in2_h &= ~1;
+
+            LOGV("jpegPadding %d", jpegPadding);
+
+            // Crop the image if zoomed.
+            if (mCrop.in2_w != 0 && mCrop.in2_h != 0 &&
+                    ((mCrop.in2_w + jpegPadding) < mCrop.out2_w) &&
+                    ((mCrop.in2_h + jpegPadding) < mCrop.out2_h) &&
+                    ((mCrop.in1_w + jpegPadding) < mCrop.out1_w)  &&
+                    ((mCrop.in1_h + jpegPadding) < mCrop.out1_h) ) {
+                LOGV("Image zoomed. Crop it");
+                // By the time native_get_picture returns, picture is taken. Call
+                // shutter callback if cam config thread has not done that.
+                notifyShutter_new(&mCrop, FALSE);
+                {
+                    Mutex::Autolock l(&mRawPictureHeapLock);
+                    if(mRawHeap != NULL)
+                        crop_yuv420(mCrop.out2_w, mCrop.out2_h, (mCrop.in2_w + jpegPadding), (mCrop.in2_h + jpegPadding),
+                                (uint8_t *)mRawHeap->mHeap->base());
+                    if(mThumbnailHeap != NULL) {
+                        crop_yuv420(mCrop.out1_w, mCrop.out1_h, (mCrop.in1_w + jpegPadding), (mCrop.in1_h + jpegPadding),
+                                (uint8_t *)mThumbnailHeap->mHeap->base());
+                    }
+                }
+
+                // We do not need jpeg encoder to upscale the image. Set the new
+                // dimension for encoder.
+                mDimension.orig_picture_dx = mCrop.in2_w + jpegPadding;
+                mDimension.orig_picture_dy = mCrop.in2_h + jpegPadding;
+                mDimension.thumbnail_width = mCrop.in1_w + jpegPadding;
+                mDimension.thumbnail_height = mCrop.in1_h + jpegPadding;
+                memset(&mCrop, 0, sizeof(mCrop));
+            }else {
+                LOGV("Image not zoomed. Don't crop it");
+                memset(&mCrop, 0 ,sizeof(mCrop));
+                // By the time native_get_picture returns, picture is taken. Call
+                // shutter callback if cam config thread has not done that.
+                notifyShutter_new(&mCrop, FALSE);
+            }
+
+            if (mDataCb && (mMsgEnabled & CAMERA_MSG_RAW_IMAGE)) {
+                mDataCb(CAMERA_MSG_RAW_IMAGE, mRawHeap->mBuffers[0],
+                    mCallbackCookie);
+            }
+        } else {
+            // By the time native_get_picture returns, picture is taken. Call
+            // shutter callback if cam config thread has not done that.
+            notifyShutter();
+            mDataCb(CAMERA_MSG_RAW_IMAGE, mRawHeap->mBuffers[0], mCallbackCookie);
+        }
+/* End of TAG */
     }
     else LOGV("Raw-picture callback was canceled--skipping.");
 
@@ -2337,7 +2536,6 @@ void QualcommCameraHardware::receiveJpegPicture(void)
 
     LINK_jpeg_encoder_join();
     deinitRaw();
-
     LOGV("receiveJpegPicture: X callback done.");
 }
 
@@ -2415,6 +2613,7 @@ status_t QualcommCameraHardware::setPictureSize(const CameraParameters& params)
     return BAD_VALUE;
 }
 
+/* Tag JB 02/25/2001 : zoom postview image fix */
 bool QualcommCameraHardware::isValidDimension(int width, int height) {
     bool retVal = FALSE;
     /* This function checks if a given resolution is valid or not.
@@ -2450,7 +2649,7 @@ status_t QualcommCameraHardware::setEffect(const CameraParameters& params)
     int32_t value_wb = attr_lookup(whitebalance, sizeof(whitebalance) / sizeof(str_map), str_wb);
     const char *str = params.get(CameraParameters::KEY_EFFECT);
 
-	LOGE("setEffect");
+	LOGV("setEffect");
 
     if (str != NULL) {
         int32_t value = attr_lookup(effects, sizeof(effects) / sizeof(str_map), str);
@@ -2470,7 +2669,7 @@ status_t QualcommCameraHardware::setEffect(const CameraParameters& params)
                return NO_ERROR;
            }
            else {
-		   	LOGE("setEffect : CAMERA_SET_PARM_EFFECT");
+		       LOGV("setEffect : CAMERA_SET_PARM_EFFECT");
                mParameters.set(CameraParameters::KEY_EFFECT, str);
                bool ret = native_set_parm(CAMERA_SET_PARM_EFFECT, sizeof(value),
                                            (void *)&value);
@@ -2555,7 +2754,7 @@ status_t QualcommCameraHardware::setAntibanding(const CameraParameters& params)
             camera_antibanding_type temp = (camera_antibanding_type) value;
             mParameters.set(CameraParameters::KEY_ANTIBANDING, str);
             bool ret;
-            LOGE("setAntibanding : CAMERA_SET_PARM_ANTIBANDING");
+            LOGV("setAntibanding : CAMERA_SET_PARM_ANTIBANDING");
             ret = native_set_parm(CAMERA_SET_PARM_ANTIBANDING,
                             sizeof(camera_antibanding_type), (void *)&temp);
             return ret ? NO_ERROR : UNKNOWN_ERROR;
@@ -2887,7 +3086,7 @@ static void receive_jpeg_callback(jpeg_event_t status)
     LOGV("receive_jpeg_callback E (completion status %d)", status);
     if (status == JPEG_EVENT_DONE) {
         sp<QualcommCameraHardware> obj = QualcommCameraHardware::getInstance();
-        if (obj != 0) {
+        if (obj != 0) {            
             obj->receiveJpegPicture();
         }
     }

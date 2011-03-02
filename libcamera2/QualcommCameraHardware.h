@@ -167,14 +167,24 @@ typedef struct
 
 typedef struct
 {
-    unsigned int in1_w;
     unsigned int in1_h;
-    unsigned int out1_w;
     unsigned int out1_h;
-    unsigned int in2_w;
+    unsigned int in1_w;
+    unsigned int out1_w;
     unsigned int in2_h;
     unsigned int out2_w;
+    unsigned int in2_w;
     unsigned int out2_h;
+#if 0
+	unsigned int in1_w;
+	unsigned int in1_h;
+	unsigned int out1_w;
+	unsigned int out1_h;
+	unsigned int in2_w;
+	unsigned int in2_h;
+	unsigned int out2_w;
+	unsigned int out2_h;
+#endif
     uint8_t update_flag; 
 } common_crop_t;
 
@@ -302,6 +312,7 @@ public:
     void jpeg_set_location();
     void receiveJpegPictureFragment(uint8_t *buf, uint32_t size);
     void notifyShutter();
+    void notifyShutter_new(common_crop_t *crop, bool mPlayShutterSoundOnly);
 
 private:
     QualcommCameraHardware();
@@ -396,7 +407,6 @@ private:
     sp<AshmemPool> mJpegHeap;
     sp<PmemPool> mRawSnapShotPmemHeap;
     sp<AshmemPool> mRawSnapshotAshmemHeap;
-    sp<PmemPool> mPostViewHeap;
 
     bool startCamera();
     bool initPreview();
@@ -418,6 +428,7 @@ private:
     Condition mSnapshotThreadWait;
     friend void *snapshot_thread(void *user);
     void runSnapshotThread(void *data);
+    Mutex mRawPictureHeapLock;
 
     void initDefaultParameters();
     /* TAG JB 01/21/2010 : Sensor dependant parameters */
@@ -437,6 +448,7 @@ private:
     /* End of TAG */
     
     /* TAG JB 01/21/2010 : Zoom */
+    void storePreviewFrameForPostview();
     status_t setZoom(const CameraParameters& params);
     /* End of TAG */
 
