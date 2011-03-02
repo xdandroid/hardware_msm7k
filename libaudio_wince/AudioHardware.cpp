@@ -55,6 +55,7 @@ static status_t set_volume_rpc(uint32_t device,
 /* Specific pass-through device for special ops in libacoustic */
 static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
 static int SND_DEVICE_PLAYBACK_HEADSET = 254;
+static int gSND_DEVICE_CURRENT = -1;
 
 // ----------------------------------------------------------------------------
 
@@ -165,6 +166,8 @@ AudioHardware::AudioHardware() :
         CHECK_FOR(IDLE) {}
 #undef CHECK_FOR
     }
+
+    gSND_DEVICE_CURRENT = SND_DEVICE_CURRENT;
 
     /* Reset remote audio */
     if ( SND_DEVICE_IDLE != -1) {
@@ -773,6 +776,7 @@ status_t AudioHardware::AudioStreamOutMSM72xx::set(
 
 AudioHardware::AudioStreamOutMSM72xx::~AudioStreamOutMSM72xx()
 {
+    msm72xx_set_audio_path(0, 0, gSND_DEVICE_CURRENT, false );
     if (mFd >= 0) close(mFd);
 }
 
@@ -855,6 +859,7 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
 
 Error:
     if (mFd >= 0) {
+        msm72xx_set_audio_path(0, 0, gSND_DEVICE_CURRENT, false );
         ::close(mFd);
         mFd = -1;
     }
@@ -868,6 +873,7 @@ status_t AudioHardware::AudioStreamOutMSM72xx::standby()
 {
     status_t status = NO_ERROR;
     if (!mStandby && mFd >= 0) {
+        msm72xx_set_audio_path(0, 0, gSND_DEVICE_CURRENT, false );
         ::close(mFd);
         mFd = -1;
     }
