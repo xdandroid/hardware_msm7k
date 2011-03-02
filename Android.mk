@@ -15,7 +15,7 @@
 #
 
 common_msm_dirs := libcopybit liblights librpc
-msm7k_dirs := $(common_msm_dirs) boot libgralloc libaudio libcamera2
+msm7k_dirs := $(common_msm_dirs) boot libgralloc libaudio libcamera2 libacoustic libaudio_wince
 qsd8k_dirs := $(common_msm_dirs) libgralloc-qsd8k libaudio-qsd8k dspcrashd
 
 ifeq ($(TARGET_BOARD_PLATFORM),msm7k)
