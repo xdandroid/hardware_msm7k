@@ -360,7 +360,7 @@ static int UpdateAudioAdieTable(bool bAudioUplinkReq, int paramR1, bool bEnableH
     char temp_table[0x80];
 
 
-    LOGV("UpdateAudioAdieTable(bAudioUplinkReq %d,bAUXBypassReq %d, bEnableHSSD=%d\n",
+    LOGV("UpdateAudioAdieTable(bAudioUplinkReq %d,bAUXBypassReq %d, bEnableHSSD=%d)\n",
             bAudioUplinkReq, bEnableHSSD, bAUXBypassReq);
 
     do 
