@@ -1566,7 +1566,7 @@ int msm72xx_set_audio_path(bool bEnableMic, bool bEnableDualMic,
             audio_path.bEnableSpeaker = false;
         }
 
-        if ( device_out == SND_DEVICE_HEADSET ) {
+        if ( (device_out == SND_DEVICE_HEADSET) || (device_out == SND_DEVICE_PLAYBACK_HEADSET) ) {
             audio_path.bEnableHeadset = true;
         } else {
             audio_path.bEnableHeadset = false;
