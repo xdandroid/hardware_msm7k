@@ -317,6 +317,11 @@ static int SND_DEVICE_PLAYBACK_HEADSET = 254;
 static int mCurrentSndDevice = -1;
 static int mCurrent_Adie_PGA_Gain = 1;
 
+
+static bool bCurrentAudioUplinkState = 0;
+static bool bCurrentEnableHSSDState = 0;
+static bool bCurrentAUXBypassReqState = 0;
+
 /***********************************************************************************
  *
  *  Privates functions
@@ -351,7 +356,7 @@ static int get_pga_gain_for_fm_profile(int profile, int current_pga_gain)
     return 0;
 }
 
-static int UpdateAudioAdieTable(bool bAudioUplinkReq, int paramR1, bool bEnableHSSD, bool bAUXBypassReq)
+static int UpdateAudioAdieTable(bool bAudioUplinkReq, int paramR1, bool bEnableHSSD, bool bAUXBypassReq, bool bForceUpdate)
 {
     struct adie_table table;
     int table_num = 0;
@@ -360,8 +365,16 @@ static int UpdateAudioAdieTable(bool bAudioUplinkReq, int paramR1, bool bEnableH
     char temp_table[0x80];
 
 
-    LOGV("UpdateAudioAdieTable(bAudioUplinkReq %d,bAUXBypassReq %d, bEnableHSSD=%d)\n",
-            bAudioUplinkReq, bEnableHSSD, bAUXBypassReq);
+    LOGV("UpdateAudioAdieTable(bAudioUplinkReq %d,bAUXBypassReq %d, bEnableHSSD=%d, bForceUpdate = %d)\n",
+            bAudioUplinkReq, bEnableHSSD, bAUXBypassReq, bForceUpdate);
+
+    if ( (bCurrentAudioUplinkState  == bAudioUplinkReq) && 
+         (bCurrentEnableHSSDState   == bEnableHSSD ) &&
+         (bCurrentAUXBypassReqState == bAUXBypassReq) && 
+         (bForceUpdate == false) ) {
+        LOGV("Update not required");
+        return 0;
+    }
 
     do 
     {
@@ -413,6 +426,10 @@ static int UpdateAudioAdieTable(bool bAudioUplinkReq, int paramR1, bool bEnableH
     }
     while ( table_num < 32 );
 
+    bCurrentAudioUplinkState  = bAudioUplinkReq;
+    bCurrentEnableHSSDState   = bEnableHSSD;
+    bCurrentAUXBypassReqState = bAUXBypassReq;
+
     return 0;
 }
 
@@ -434,7 +451,6 @@ static int ParseAudioParaLine(char* line, int len)
             while ( (token = strtok(NULL, ",")) ) {
                 Audio_Path_Table[table_num].array[field_count++] = strtol(token, &ps, 16);
             };
-            //LOGV("field count : %d (0x%x)\n", field_count, field_count);
             break;
 
         case 'B':
@@ -446,7 +462,6 @@ static int ParseAudioParaLine(char* line, int len)
             while ( (token = strtok(NULL, ",")) ) {
                 Phone_Acoustic_Table[table_num].array[field_count++] = strtol(token, &ps, 16);
             };
-            //LOGV("field count : %d, size %d (0x%x)\n", field_count, field_count *2, field_count *2);
             break;
 
         case 'C':
@@ -457,7 +472,6 @@ static int ParseAudioParaLine(char* line, int len)
             while ( (token = strtok(NULL, ",")) ) {
                 CE_Acoustic_Table[table_num].array[field_count++] = strtol(token, &ps, 16);
             };
-            //LOGV("field count : %d, size %d (0x%x)\n", field_count, field_count *2, field_count *2);
             break;
 
         case 'D':
@@ -468,7 +482,6 @@ static int ParseAudioParaLine(char* line, int len)
             while ( (token = strtok(NULL, ",")) ) {
                 HTC_VOC_CAL_CODEC_TABLE_Table[table_num].array[field_count++] = strtol(token, &ps, 16);
             };
-            //LOGV("field count : %d, size %d (0x%x)\n", field_count, field_count *2, field_count *2);
             break;
 
         case 'E':
@@ -480,7 +493,6 @@ static int ParseAudioParaLine(char* line, int len)
             while ( (token = strtok(NULL, ",")) ) {
                 BT_Phone_Acoustic_Table[table_num].array[field_count++] = strtol(token, &ps, 16);
             };
-            //LOGV("field count : %d, size %d (0x%x)\n", field_count, field_count *2, field_count *2);
             break;
 
         case 'H':
@@ -495,7 +507,6 @@ static int ParseAudioParaLine(char* line, int len)
             while ( (token = strtok(NULL, ",")) ) {
                 Audio_Path_Uplink_Table[table_num].array[field_count++] = strtol(token, &ps, 16);
             };
-            //LOGV("field count : %d, size %d (0x%x)\n", field_count, field_count, field_count);
             break;
 
         default:
@@ -614,7 +625,7 @@ static int ReadAudioParaFromFile(void)
     close(csvfd);
 
     // initialise audio table with uplink off
-    UpdateAudioAdieTable(0, 0, 0, 0);
+    UpdateAudioAdieTable(0, 0, 0, 0, true);
 
     if (ioctl(acousticfd, ACOUSTIC_UPDATE_HTC_VOC_CAL_CODEC_TABLE,
                          &(HTC_VOC_CAL_CODEC_TABLE_Table->array) ) < 0) {
@@ -1580,9 +1591,9 @@ int msm72xx_set_audio_path(bool bEnableMic, bool bEnableDualMic,
             bEnableMic, bEnableDualMic, audio_path.bEnableSpeaker, audio_path.bEnableHeadset);
 
     if ( bEnableMic ) {
-        UpdateAudioAdieTable(1, 0, 0, 0);
+        UpdateAudioAdieTable(1, 0, 0, 0, false);
     } else {
-        UpdateAudioAdieTable(0, 0, 0, 0);
+        UpdateAudioAdieTable(0, 0, 0, 0, false);
     }
 
     if (ioctl(acousticfd, ACOUSTIC_SET_HW_AUDIO_PATH, &audio_path ) < 0) {
