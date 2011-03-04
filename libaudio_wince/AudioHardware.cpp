@@ -852,9 +852,11 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
             LOGV("AudioStreamOutMSM72xx::write with stream_type = %s", bMusic ? "MUSIC":"NOT MUSIC");
             if ( bMusic ) {  
                 if ( mHardware->mCurSndDevice == mHardware->SND_DEVICE_SPEAKER ) {
+                    mHardware->doAudioRouteOrMute(mHardware->SND_DEVICE_SPEAKER);
                     msm72xx_set_audio_path(0, 0, SND_DEVICE_PLAYBACK_HANDSFREE, true );
                     msm72xx_set_acoustic_table(SND_DEVICE_PLAYBACK_HANDSFREE, 5);
                 } else if ( mHardware->mCurSndDevice == mHardware->SND_DEVICE_HEADSET ) {
+                    mHardware->doAudioRouteOrMute(mHardware->SND_DEVICE_HEADSET);
                     msm72xx_set_audio_path(0, 0, SND_DEVICE_PLAYBACK_HEADSET, true );
                     msm72xx_set_acoustic_table(SND_DEVICE_PLAYBACK_HEADSET, 5);
                 }
