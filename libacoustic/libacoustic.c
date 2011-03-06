@@ -363,7 +363,7 @@ static int UpdateAudioAdieTable(bool bAudioUplinkReq, int paramR1, bool bEnableH
     int tab_byte_idx;
 
     char temp_table[0x80];
-
+    uint16_t pcom_update[1];
 
     LOGV("UpdateAudioAdieTable(bAudioUplinkReq %d,bAUXBypassReq %d, bEnableHSSD=%d, bForceUpdate = %d)\n",
             bAudioUplinkReq, bEnableHSSD, bAUXBypassReq, bForceUpdate);
@@ -425,6 +425,22 @@ static int UpdateAudioAdieTable(bool bAudioUplinkReq, int paramR1, bool bEnableH
         table_num += 1;
     }
     while ( table_num < 32 );
+
+    /* Generate PCOM_UPDATE_AUDIO 0x1 */
+    pcom_update[0] = 0x1;
+    if ( ioctl(acousticfd, ACOUSTIC_PCOM_UPDATE_AUDIO, &pcom_update) < 0) {
+        LOGE("ACOUSTIC_PCOM_UPDATE_AUDIO error.");
+        return -EIO;
+    } 
+    /* Generate PCOM_UPDATE_AUDIO 0x80 */
+    // TODO : Does this belongs to UpdateAdie or to fake pcm open ?!?
+#if 0
+    pcom_update[0] = 0x80;
+    if ( ioctl(acousticfd, ACOUSTIC_PCOM_UPDATE_AUDIO, &pcom_update) < 0) {
+        LOGE("ACOUSTIC_PCOM_UPDATE_AUDIO error.");
+        return -EIO;
+    } 
+#endif
 
     bCurrentAudioUplinkState  = bAudioUplinkReq;
     bCurrentEnableHSSDState   = bEnableHSSD;
@@ -1183,6 +1199,9 @@ int htc_acoustic_init(void)
         }
         else LOGE("Could not retrieve number of MSM SND endpoints.");
 
+        // Close snd
+        close(m7xsnddriverfd);
+
 /* TODO : Check and enable ??
         int AUTO_VOLUME_ENABLED = 1; // setting enabled as default
 
@@ -1468,6 +1487,7 @@ int msm72xx_set_acoustic_table(int device, int volume)
 
     if ( device == SND_DEVICE_CURRENT ) {
        out_path = mCurrentSndDevice;
+       LOGV("Use current device %d", out_path);
     } else {
         if( device == SND_DEVICE_HANDSET ) {
             LOGV("Acoustic profile : EARCUPLE");
@@ -1605,7 +1625,7 @@ int msm72xx_set_audio_path(bool bEnableMic, bool bEnableDualMic,
         audio_path.bEnableHeadset = false;
     }
 
-    LOGV("bEnableMic = %d, bEnableDualMic = %d, bEnableSpeaker = %d, bEnableHeadset = %d",
+    LOGV("msm72xx_set_audio_path: Mic = %d, DualMic = %d, Speaker = %d, Headset = %d",
             bEnableMic, bEnableDualMic, audio_path.bEnableSpeaker, audio_path.bEnableHeadset);
 
     if ( bEnableMic ) {

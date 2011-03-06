@@ -45,6 +45,7 @@ struct adie_table {
 #define ACOUSTIC_UPDATE_CE_TABLE                _IOW(ACOUSTIC_IOCTL_MAGIC,  3, uint16_t* )
 #define ACOUSTIC_UPDATE_AUDIO_PATH_TABLE        _IOW(ACOUSTIC_IOCTL_MAGIC,  4, uint16_t* )
 #define ACOUSTIC_UPDATE_HTC_VOC_CAL_CODEC_TABLE _IOW(ACOUSTIC_IOCTL_MAGIC,  5, uint16_t* )
+#define ACOUSTIC_PCOM_UPDATE_AUDIO              _IOW(ACOUSTIC_IOCTL_MAGIC,  6, uint16_t* )
 
 #define ACOUSTIC_SET_HW_AUDIO_PATH          _IOW(ACOUSTIC_IOCTL_MAGIC,  10, struct msm_audio_path* )
 
