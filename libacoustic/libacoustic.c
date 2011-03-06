@@ -445,6 +445,9 @@ static int ParseAudioParaLine(char* line, int len)
     switch ( token[0] ) {
         case 'A':
             table_num = strtol(token + 1, &ps, 10);
+            if ( table_num > 31) {
+                return -EINVAL;
+            }
             //LOGV("Audio Path Table: %d\n", table_num);
             /* Skip the mode name string field */
             strtok(NULL, ",");
@@ -456,6 +459,9 @@ static int ParseAudioParaLine(char* line, int len)
         case 'B':
         case 'F':
             table_num = strtol(token + 1, &ps, 10);
+            if ( table_num > 99) {
+                return -EINVAL;
+            }
             //LOGV("Phone Acoustic Table: %d\n", table_num);
             /* Skip the mode name string field */
             strtok(NULL, ",");
@@ -466,6 +472,9 @@ static int ParseAudioParaLine(char* line, int len)
 
         case 'C':
             table_num = strtol(token + 1, &ps, 10);
+            if ( table_num > 14) {
+                return -EINVAL;
+            }
             //LOGV("CE Acoustic Table: %d\n", table_num);
             /* Skip the mode name string field */
             strtok(NULL, ",");
@@ -476,6 +485,9 @@ static int ParseAudioParaLine(char* line, int len)
 
         case 'D':
             table_num = strtol(token + 1, &ps, 10);
+            if ( table_num > 31) {
+                return -EINVAL;
+            }
             //LOGV("HTC_VOC_CAL_CODEC_TABLE Table: %d\n", table_num);
             /* Skip the mode name string field */
             strtok(NULL, ",");
@@ -487,6 +499,9 @@ static int ParseAudioParaLine(char* line, int len)
         case 'E':
         case 'G':
             table_num = strtol(token + 1, &ps, 10);
+            if ( table_num > 100) {
+                return -EINVAL;
+            }
             //LOGV("BT Phone Acoustic Table: %d\n", table_num);
             /* Skip the mode name string field */
             strtok(NULL, ",");
@@ -501,6 +516,9 @@ static int ParseAudioParaLine(char* line, int len)
 
         case 'U':
             table_num = strtol(token + 1, &ps, 10);
+            if ( table_num > 31) {
+                return -EINVAL;
+            }
             //LOGV("Audio Path Table Uplink: %d\n", table_num);
             /* Skip the mode name string field */
             strtok(NULL, ",");
