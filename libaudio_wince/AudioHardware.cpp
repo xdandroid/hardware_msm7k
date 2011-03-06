@@ -57,6 +57,8 @@ static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
 static int SND_DEVICE_PLAYBACK_HEADSET = 254;
 static int gSND_DEVICE_CURRENT = -1;
 
+static int bCurrentOutStream = AudioSystem::DEFAULT;
+
 // ----------------------------------------------------------------------------
 
 AudioHardware::AudioHardware() :
@@ -438,7 +440,9 @@ static status_t set_volume_rpc(uint32_t device,
      args.method = method;
      args.volume = volume;
 
-     msm72xx_set_acoustic_table(device, volume);
+     if ( msm72xx_set_acoustic_table != NULL ) {
+         msm72xx_set_acoustic_table(device, volume);
+     }
 
      if (ioctl(fd, SND_SET_VOLUME, &args) < 0) {
          LOGE("snd_set_volume error.");
@@ -465,6 +469,7 @@ status_t AudioHardware::setVoiceVolume(float v)
 
     Mutex::Autolock lock(mLock);
     set_volume_rpc(SND_DEVICE_CURRENT, SND_METHOD_VOICE, vol);
+    //set_volume_rpc(SND_DEVICE_IDLE, SND_METHOD_VOICE, vol);
     return NO_ERROR;
 }
 
@@ -521,7 +526,9 @@ static status_t do_route_audio_rpc(uint32_t device,
     float volume;
     AudioSystem::getMasterVolume(&volume);
     volume = ceil(volume * 5.0);    
-    msm72xx_set_acoustic_table(device, volume);
+    if ( msm72xx_set_acoustic_table != NULL ) {
+        msm72xx_set_acoustic_table(device, volume);
+    }
 
     if (ioctl(fd, SND_SET_DEVICE, &args) < 0) {
         LOGE("snd_set_device error.");
@@ -561,7 +568,16 @@ status_t AudioHardware::doAudioRouteOrMute(uint32_t device)
 
     // TODO : Right place ?
     LOGV("AudioHardware::doAudioRouteOrMute");
-    msm72xx_set_audio_path(!mMicMute, 0, device, (mMode != AudioSystem::MODE_IN_CALL)? false:true );
+    if ( msm72xx_set_audio_path != NULL ) {
+        bool bEnableOut = false;
+        /* XXX: Can't be used. @ boot time, isStreamActive blocks media service.
+        bool bMusic;
+        AudioSystem::isStreamActive(AudioSystem::MUSIC, &bMusic);*/
+        if ( (mMode == AudioSystem::MODE_IN_CALL) || (bCurrentOutStream != AudioSystem::DEFAULT) ) {
+            bEnableOut = true;    
+        }
+        msm72xx_set_audio_path(!mMicMute, 0, device, bEnableOut );
+    }
 
     LOGV("doAudioRouteOrMute() device %x, mMode %d, mMicMute %d", device, mMode, mMicMute);
     return do_route_audio_rpc(device,
@@ -662,6 +678,12 @@ status_t AudioHardware::doRouting()
             msm72xx_enable_audpp(audProcess, sndDevice);
         }
         mCurSndDevice = sndDevice;
+
+        /* Update volumt in case of device change */
+        float volume;
+        AudioSystem::getMasterVolume(&volume);
+        volume = ceil(volume * 5.0); 
+        set_volume_rpc(mCurSndDevice, (mMode == AudioSystem::MODE_IN_CALL)?SND_METHOD_VOICE:1, volume);
     }
 
     return ret;
@@ -778,7 +800,8 @@ status_t AudioHardware::AudioStreamOutMSM72xx::set(
 AudioHardware::AudioStreamOutMSM72xx::~AudioStreamOutMSM72xx()
 {
     LOGV("AudioHardware::AudioStreamOutMSM72xx::~AudioStreamOutMSM72xx");
-    mHardware->doAudioRouteOrMute(mHardware->SND_DEVICE_CURRENT);
+    bCurrentOutStream = AudioSystem::DEFAULT;
+    mHardware->doAudioRouteOrMute(mHardware->mCurSndDevice);
     if (mFd >= 0) close(mFd);
 }
 
@@ -851,15 +874,25 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
             AudioSystem::isStreamActive(AudioSystem::MUSIC, &bMusic);
             LOGV("AudioStreamOutMSM72xx::write with stream_type = %s", bMusic ? "MUSIC":"NOT MUSIC");
             if ( bMusic ) {  
+                bCurrentOutStream = AudioSystem::MUSIC;
+                int device = mHardware->SND_DEVICE_CURRENT;
                 if ( mHardware->mCurSndDevice == mHardware->SND_DEVICE_SPEAKER ) {
                     mHardware->doAudioRouteOrMute(mHardware->SND_DEVICE_SPEAKER);
-                    msm72xx_set_audio_path(0, 0, SND_DEVICE_PLAYBACK_HANDSFREE, true );
-                    msm72xx_set_acoustic_table(SND_DEVICE_PLAYBACK_HANDSFREE, 5);
+                    device = SND_DEVICE_PLAYBACK_HANDSFREE;
                 } else if ( mHardware->mCurSndDevice == mHardware->SND_DEVICE_HEADSET ) {
                     mHardware->doAudioRouteOrMute(mHardware->SND_DEVICE_HEADSET);
-                    msm72xx_set_audio_path(0, 0, SND_DEVICE_PLAYBACK_HEADSET, true );
-                    msm72xx_set_acoustic_table(SND_DEVICE_PLAYBACK_HEADSET, 5);
+                    device = SND_DEVICE_PLAYBACK_HEADSET;
                 }
+
+                if ( msm72xx_set_audio_path != NULL ) {
+                    msm72xx_set_audio_path(0, 0, device, true );
+                }
+                if ( msm72xx_set_acoustic_table != NULL ) {
+                    msm72xx_set_acoustic_table(device, 5);
+                }
+
+            } else {
+                bCurrentOutStream = AudioSystem::DEFAULT;
             }
 
             ioctl(mFd, AUDIO_START, 0);
@@ -870,7 +903,8 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
 Error:
     if (mFd >= 0) {
         LOGV("AudioHardware::AudioStreamOutMSM72xx::write error");
-        mHardware->doAudioRouteOrMute(mHardware->SND_DEVICE_CURRENT);
+        bCurrentOutStream = AudioSystem::DEFAULT;
+        mHardware->doAudioRouteOrMute(mHardware->mCurSndDevice);
         ::close(mFd);
         mFd = -1;
     }
@@ -885,7 +919,8 @@ status_t AudioHardware::AudioStreamOutMSM72xx::standby()
     status_t status = NO_ERROR;
     if (!mStandby && mFd >= 0) {
         LOGV("AudioHardware::AudioStreamOutMSM72xx::standby");
-        mHardware->doAudioRouteOrMute(mHardware->SND_DEVICE_CURRENT);
+        bCurrentOutStream = AudioSystem::DEFAULT;
+        mHardware->doAudioRouteOrMute(mHardware->mCurSndDevice);
         ::close(mFd);
         mFd = -1;
     }
