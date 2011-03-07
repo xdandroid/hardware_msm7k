@@ -158,7 +158,7 @@ struct d_table_st {
 struct d_table_s {
     union {
         struct d_table_st table;
-        uint16_t array[0xB];
+        uint16_t array[0xB];        // Size = 0x8 on some devices like diamond.
     };
 };
 
@@ -265,11 +265,17 @@ struct c_table_s {
  *
  ***********************************************************************************/
 static struct au_table_s*    Audio_Path_Table = NULL;              /* a_table ('A') */
+static uint8_t APT_max_index   = 0;
 static struct au_table_s*    Audio_Path_Uplink_Table = NULL;       /* u_table ('U') */
+static uint8_t APUT_max_index  = 0;
 static struct fg_table_s*    Phone_Acoustic_Table = NULL;          /* f_table ('F' + 'B') */
+static uint8_t PAT_max_index   = 0;
 static struct fg_table_s*    BT_Phone_Acoustic_Table = NULL;       /* g_table ('E' + 'G') */
+static uint8_t BTPAT_max_index = 0;
 static struct d_table_s*     HTC_VOC_CAL_CODEC_TABLE_Table = NULL; /* d_table ('D') */
+static uint8_t HVCCT_max_index = 0;
 static struct c_table_s*     CE_Acoustic_Table = NULL;             /* c_table ('C') */
+static uint8_t CEAT_max_index  = 0;
 
 static int acousticfd = 0;
 static int m7xsnddriverfd;
@@ -424,7 +430,7 @@ static int UpdateAudioAdieTable(bool bAudioUplinkReq, int paramR1, bool bEnableH
 
         table_num += 1;
     }
-    while ( table_num < 32 );
+    while ( table_num < APT_max_index );
 
     /* Generate PCOM_UPDATE_AUDIO 0x1 */
     pcom_update[0] = 0x1;
@@ -464,6 +470,7 @@ static int ParseAudioParaLine(char* line, int len)
             if ( table_num > 31) {
                 return -EINVAL;
             }
+            if ( APT_max_index < (table_num+1) ) APT_max_index = table_num+1;
             //LOGV("Audio Path Table: %d\n", table_num);
             /* Skip the mode name string field */
             strtok(NULL, ",");
@@ -478,6 +485,7 @@ static int ParseAudioParaLine(char* line, int len)
             if ( table_num > 99) {
                 return -EINVAL;
             }
+            if ( PAT_max_index < (table_num+1) ) PAT_max_index = table_num+1;
             //LOGV("Phone Acoustic Table: %d\n", table_num);
             /* Skip the mode name string field */
             strtok(NULL, ",");
@@ -491,6 +499,7 @@ static int ParseAudioParaLine(char* line, int len)
             if ( table_num > 14) {
                 return -EINVAL;
             }
+            if ( CEAT_max_index < (table_num+1) ) CEAT_max_index = table_num+1;
             //LOGV("CE Acoustic Table: %d\n", table_num);
             /* Skip the mode name string field */
             strtok(NULL, ",");
@@ -504,6 +513,7 @@ static int ParseAudioParaLine(char* line, int len)
             if ( table_num > 31) {
                 return -EINVAL;
             }
+            if ( HVCCT_max_index < (table_num+1) ) HVCCT_max_index = table_num+1;
             //LOGV("HTC_VOC_CAL_CODEC_TABLE Table: %d\n", table_num);
             /* Skip the mode name string field */
             strtok(NULL, ",");
@@ -518,6 +528,7 @@ static int ParseAudioParaLine(char* line, int len)
             if ( table_num > 100) {
                 return -EINVAL;
             }
+            if ( BTPAT_max_index < (table_num+1) ) BTPAT_max_index = table_num+1;
             //LOGV("BT Phone Acoustic Table: %d\n", table_num);
             /* Skip the mode name string field */
             strtok(NULL, ",");
@@ -535,6 +546,7 @@ static int ParseAudioParaLine(char* line, int len)
             if ( table_num > 31) {
                 return -EINVAL;
             }
+            if ( APUT_max_index < (table_num+1) ) APUT_max_index = table_num+1;
             //LOGV("Audio Path Table Uplink: %d\n", table_num);
             /* Skip the mode name string field */
             strtok(NULL, ",");
@@ -558,6 +570,9 @@ static int ReadAudioParaFromFile(void)
     char *read_buf;
     char *next_str, *current_str;
     int csvfd;
+    struct htc_voc_cal_table htc_voc_cal_tbl;
+    uint16_t  htc_voc_cal_tbl_field_size = 0;
+    uint16_t* htc_voc_cal_tbl_conv = NULL;
 
     static const char *const path =
         AUDIO_PARA_DEFAULT_FILENAME;
@@ -590,6 +605,13 @@ static int ReadAudioParaFromFile(void)
         close(csvfd);
         return -1;
     }
+
+    if ( ioctl(acousticfd, ACOUSTIC_GET_HTC_VOC_CAL_FIELD_SIZE, &htc_voc_cal_tbl_field_size) < 0) {
+        LOGE("ACOUSTIC_GET_HTC_VOC_CAL_FIELD_SIZE error.");
+        return -EIO;
+    } 
+    LOGV("HTC_VOC_CAL_FIELD_SIZE = %d", htc_voc_cal_tbl_field_size);
+    
 
     if ( Audio_Path_Table == NULL ) {
         Audio_Path_Table = (struct au_table_s*) malloc(32 * sizeof(struct au_table_s) );  // 0x1000
@@ -658,14 +680,57 @@ static int ReadAudioParaFromFile(void)
     munmap(read_buf, st.st_size);
     close(csvfd);
 
+    LOGV("Readed :");
+    LOGV("%d Audio_Path_Table entries", APT_max_index);
+    LOGV("%d Audio_Path_Uplink_Table entries", APUT_max_index);
+    LOGV("%d Phone_Acoustic_Table entries", PAT_max_index);
+    LOGV("%d BT_Phone_Acoustic_Table entries", BTPAT_max_index);
+    LOGV("%d HTC_VOC_CAL_CODEC_TABLE_Table entries", HVCCT_max_index);
+    LOGV("%d CE_Acoustic_Table entries", CEAT_max_index);
+
     // initialise audio table with uplink off
     UpdateAudioAdieTable(0, 0, 0, 0, true);
 
+    /* Table might need to be converted (on some devices, 1 field is 8 param, whereas on
+     * rhodium, it's 0xB params)
+     * Note that this is the only one field size that varies between those devices.
+     * All other field types are same size.
+     */
+#if 1
+    if ( htc_voc_cal_tbl_field_size < 0xB ) {
+        int field;
+        uint16_t* htc_voc_cal_tbl_conv_field;
+        LOGV("Converting table to correct field size");
+        LOGV("Allocate %d bytes", HVCCT_max_index * htc_voc_cal_tbl_field_size * sizeof(uint16_t));
+        /* Convert table to required field size */
+        htc_voc_cal_tbl_conv = (uint16_t*) malloc(HVCCT_max_index * htc_voc_cal_tbl_field_size * sizeof(uint16_t));
+        if ( htc_voc_cal_tbl_conv == NULL ) {
+            goto exit;
+        }
+        for (field=0; field<HVCCT_max_index; field++) {
+            htc_voc_cal_tbl_conv_field = &htc_voc_cal_tbl_conv[field * htc_voc_cal_tbl_field_size];
+            memcpy((void*) htc_voc_cal_tbl_conv_field,
+                     HTC_VOC_CAL_CODEC_TABLE_Table[field].array, htc_voc_cal_tbl_field_size * sizeof(uint16_t));
+            LOGV("done %d", field);
+        }
+        htc_voc_cal_tbl.size = HVCCT_max_index * htc_voc_cal_tbl_field_size * sizeof(uint16_t);
+        htc_voc_cal_tbl.pArray = htc_voc_cal_tbl_conv;
+    } else {
+        htc_voc_cal_tbl.size = HVCCT_max_index * sizeof(struct d_table_s);
+        htc_voc_cal_tbl.pArray = HTC_VOC_CAL_CODEC_TABLE_Table->array;
+    }
     if (ioctl(acousticfd, ACOUSTIC_UPDATE_HTC_VOC_CAL_CODEC_TABLE,
-                         &(HTC_VOC_CAL_CODEC_TABLE_Table->array) ) < 0) {
+                         &htc_voc_cal_tbl ) < 0) {
         LOGE("ACOUSTIC_UPDATE_HTC_VOC_CAL_CODEC_TABLE error.");
         return -EIO;
     }
+
+    if ( htc_voc_cal_tbl_conv ) {
+        free(htc_voc_cal_tbl_conv);
+    }
+
+exit:
+#endif
 
 /*
     if ( BT_Phone_Acoustic_Table[0] == 0 ) {
@@ -683,7 +748,6 @@ static int check_and_set_audpre_parameters(char *buf, int size)
 {
     char *p, *ps;
     static const char *const seps = ",";
-    int table_num;
     int i, j;
     int device_id = 0;
     int samp_index = 0;
@@ -698,7 +762,7 @@ static int check_and_set_audpre_parameters(char *buf, int size)
         samp_index = strtol(p + 1, &ps, 10);
         LOGV("Found TX_IIR filter %d", samp_index); 
         /* Index range = 0..17 */
-        if ( table_num > 17 ) {
+        if ( samp_index > 17 ) {
             return -EINVAL;
         }
 
@@ -732,7 +796,7 @@ static int check_and_set_audpre_parameters(char *buf, int size)
         samp_index = strtol(p + 1, &ps, 10);
         LOGV("Found AGC filter %d", samp_index); 
         /* Index range = 0..8 */
-        if ( table_num > 8 ) {
+        if ( samp_index > 8 ) {
             return -EINVAL;
         }
 
@@ -783,7 +847,7 @@ static int check_and_set_audpre_parameters(char *buf, int size)
         samp_index = strtol(p + 1, &ps, 10);
         LOGV("Found NS record %d", samp_index); 
         /* Index range = 0..8 */
-        if ( table_num > 8 ) {
+        if ( samp_index > 8 ) {
             return -EINVAL;
         }
 
