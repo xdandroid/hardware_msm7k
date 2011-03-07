@@ -278,7 +278,6 @@ static struct c_table_s*     CE_Acoustic_Table = NULL;             /* c_table ('
 static uint8_t CEAT_max_index  = 0;
 
 static int acousticfd = 0;
-static int m7xsnddriverfd;
 static int mNumSndEndpoints;
 static struct msm_snd_endpoint *mSndEndpoints;
 
@@ -691,17 +690,14 @@ static int ReadAudioParaFromFile(void)
     // initialise audio table with uplink off
     UpdateAudioAdieTable(0, 0, 0, 0, true);
 
-    /* Table might need to be converted (on some devices, 1 field is 8 param, whereas on
-     * rhodium, it's 0xB params)
+    /* Table might need to be converted (on some devices, 1 setting is 8 params long,
+     * whereas on some others, it's 0xB params long)
      * Note that this is the only one field size that varies between those devices.
      * All other field types are same size.
      */
-#if 1
     if ( htc_voc_cal_tbl_field_size < 0xB ) {
         int field;
         uint16_t* htc_voc_cal_tbl_conv_field;
-        LOGV("Converting table to correct field size");
-        LOGV("Allocate %d bytes", HVCCT_max_index * htc_voc_cal_tbl_field_size * sizeof(uint16_t));
         /* Convert table to required field size */
         htc_voc_cal_tbl_conv = (uint16_t*) malloc(HVCCT_max_index * htc_voc_cal_tbl_field_size * sizeof(uint16_t));
         if ( htc_voc_cal_tbl_conv == NULL ) {
@@ -711,7 +707,6 @@ static int ReadAudioParaFromFile(void)
             htc_voc_cal_tbl_conv_field = &htc_voc_cal_tbl_conv[field * htc_voc_cal_tbl_field_size];
             memcpy((void*) htc_voc_cal_tbl_conv_field,
                      HTC_VOC_CAL_CODEC_TABLE_Table[field].array, htc_voc_cal_tbl_field_size * sizeof(uint16_t));
-            LOGV("done %d", field);
         }
         htc_voc_cal_tbl.size = HVCCT_max_index * htc_voc_cal_tbl_field_size * sizeof(uint16_t);
         htc_voc_cal_tbl.pArray = htc_voc_cal_tbl_conv;
@@ -719,6 +714,7 @@ static int ReadAudioParaFromFile(void)
         htc_voc_cal_tbl.size = HVCCT_max_index * sizeof(struct d_table_s);
         htc_voc_cal_tbl.pArray = HTC_VOC_CAL_CODEC_TABLE_Table->array;
     }
+
     if (ioctl(acousticfd, ACOUSTIC_UPDATE_HTC_VOC_CAL_CODEC_TABLE,
                          &htc_voc_cal_tbl ) < 0) {
         LOGE("ACOUSTIC_UPDATE_HTC_VOC_CAL_CODEC_TABLE error.");
@@ -730,8 +726,6 @@ static int ReadAudioParaFromFile(void)
     }
 
 exit:
-#endif
-
 /*
     if ( BT_Phone_Acoustic_Table[0] == 0 ) {
         memcpy(&BT_Phone_Acoustic_Table[0x40], &f_table[0x1680], 0x140);
@@ -1204,6 +1198,7 @@ int htc_acoustic_init(void)
 {
     int rc = 0;
     int cnt;
+    int m7xsnddriverfd;
     struct msm_snd_endpoint *ept;
 
     LOGV("Running custom built libhtc_acoustic.so");
@@ -1516,7 +1511,6 @@ int msm72xx_set_audpre_params(int audpre_index, int tx_iir_index)
     return -1;
 }
 
-// TODO : Check with lbhtc-acoustic.so
 int msm72xx_enable_audpre(int acoustic_flags, int audpre_index, int tx_iir_index)
 {
     int fd;
@@ -1692,12 +1686,8 @@ int msm72xx_set_audio_path(bool bEnableMic, bool bEnableDualMic,
     LOGV("msm72xx_set_audio_path: Mic = %d, DualMic = %d, Speaker = %d, Headset = %d",
             bEnableMic, bEnableDualMic, audio_path.bEnableSpeaker, audio_path.bEnableHeadset);
 
-    if ( bEnableMic ) {
-        UpdateAudioAdieTable(1, 0, 0, 0, false);
-    } else {
-        UpdateAudioAdieTable(0, 0, 0, 0, false);
-    }
-
+    UpdateAudioAdieTable(bEnableMic, 0, 0, 0, false);
+    
     if (ioctl(acousticfd, ACOUSTIC_SET_HW_AUDIO_PATH, &audio_path ) < 0) {
         LOGE("ACOUSTIC_SET_HW_AUDIO_PATH error.");
         return -EIO;
