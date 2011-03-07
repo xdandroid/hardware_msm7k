@@ -671,6 +671,15 @@ status_t AudioHardware::doRouting()
     }
 
     if (sndDevice != -1 && sndDevice != mCurSndDevice) {
+        /* If the current device is speaker, then lower the volume before 
+         * switching to the new device.
+         * On some device, it can cause power collapse if speaker is not powered off
+         * (i.e : on diamond)
+         */
+        if ( mCurSndDevice == SND_DEVICE_SPEAKER ) {
+            set_volume_rpc(mCurSndDevice, 0, 0);
+        }
+
         ret = doAudioRouteOrMute(sndDevice);
         if ((*msm72xx_enable_audpp) == 0 ) {
             LOGE("Could not open msm72xx_enable_audpp()");
