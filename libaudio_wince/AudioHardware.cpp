@@ -675,9 +675,13 @@ status_t AudioHardware::doRouting()
          * switching to the new device.
          * On some device, it can cause power collapse if speaker is not powered off
          * (i.e : on diamond)
+         *
+         * If the new device is speaker, then switch the speaker volume to 0 before
+         * power on to avoid pop noise at power up
          */
-        if ( mCurSndDevice == SND_DEVICE_SPEAKER ) {
-            set_volume_rpc(mCurSndDevice, 0, 0);
+        if ( (mCurSndDevice == SND_DEVICE_SPEAKER) || (sndDevice == SND_DEVICE_SPEAKER)  ) {
+            LOGV("Speaker workaround");
+            set_volume_rpc(SND_DEVICE_SPEAKER, 0, 0);
         }
 
         ret = doAudioRouteOrMute(sndDevice);
