@@ -24,6 +24,14 @@
 //#define MSM_HTC_ACOUSTIC_WINCE "/dev/htc-acoustic_wince"
 #define MSM_HTC_ACOUSTIC_WINCE "/dev/htc-acoustic"
 
+#define MAX_MODE_NAME_LENGTH 32
+
+struct msm_acoustic_capabilities {
+    char htc_voc_cal_fields_per_param;    /* Specifies the number of fields per parameter */
+    bool bDualMicSupported;
+    /* TODO : keep up-to-date with new fields in kernel */
+};
+
 struct msm_audio_path {
     bool bEnableMic;
     bool bEnableDualMic;
@@ -52,6 +60,7 @@ struct htc_voc_cal_table {
 #define ACOUSTIC_GET_HTC_VOC_CAL_FIELD_SIZE     _IOW(ACOUSTIC_IOCTL_MAGIC,  5, uint16_t* )
 #define ACOUSTIC_UPDATE_HTC_VOC_CAL_CODEC_TABLE _IOW(ACOUSTIC_IOCTL_MAGIC,  6, struct htc_voc_cal_table* )
 #define ACOUSTIC_PCOM_UPDATE_AUDIO              _IOW(ACOUSTIC_IOCTL_MAGIC,  7, uint16_t* )
+#define ACOUSTIC_GET_CAPABILITIES               _IOW(ACOUSTIC_IOCTL_MAGIC,  8, struct msm_acoustic_capabilities* )
 
 #define ACOUSTIC_SET_HW_AUDIO_PATH          _IOW(ACOUSTIC_IOCTL_MAGIC,  10, struct msm_audio_path* )
 
@@ -177,6 +186,176 @@ enum CE_audio_devices {
     PLAYBACK_HEADSET,
     PLAYBACK_HANDSFREE,
     SYS
+};
+
+/* CSV lines desc */
+struct header_s {
+    uint8_t Header;
+    char Mode[MAX_MODE_NAME_LENGTH];
+};
+
+struct register_table_s {
+    uint8_t Address;
+    uint8_t Reg;
+};
+
+struct fg_table_st {
+    uint16_t volume_level;
+    uint16_t codecTxGain;
+    uint16_t codecRxGain;
+    uint16_t codecSTGain;
+    uint16_t txVolume;
+    uint16_t rxVolume;
+    uint16_t rxAgcEnableFlag;
+    uint16_t compFlinkStaticGain;
+    uint16_t compFlinkAIGFlag;
+    uint16_t expFlinkThreshold;
+    uint16_t expFlinkSlope;
+    uint16_t compFlinkThreshold;
+    uint16_t compFlinkSlope;
+    uint16_t comFlinkRmsTav;
+    uint16_t compFlinkReleaseK;
+    uint16_t compFlinkAIGMin;
+    uint16_t compFlinkAIGMax;
+    uint16_t rxAvcEnableFlag;
+    uint16_t avcRlinkSensitivityOffset;
+    uint16_t avcFlinkHeadroom;
+    uint16_t txAgcEnableFlag;
+    uint16_t compRlinkStaticGain;
+    uint16_t compRlinkAIGFlag;
+    uint16_t expRlinkThreshold;
+    uint16_t expRlinkSlope;
+    uint16_t compRlinkThreshold;
+    uint16_t compRlinkSlope;
+    uint16_t comRlinkRmsTav;
+    uint16_t compRlinkReleaseK;
+    uint16_t compRlinkAIGMin;
+    uint16_t compRlinkAIGMax;
+    uint16_t NLPP_limit;
+    uint16_t NLPP_gain;
+    uint16_t AF_limit;
+    uint16_t HS_mode;
+    uint16_t Tuning_mode;
+    uint16_t echo_path_delay;
+    uint16_t OutputGain;
+    uint16_t InputGain;
+    uint16_t AF_twoalpha;
+    uint16_t AF_erl;
+    uint16_t AF_taps;
+    uint16_t AF_present_coefs;
+    uint16_t AF_offset;
+    uint16_t AF_erl_bg;
+    uint16_t AF_taps_bg;
+    uint16_t PCD_threshold;
+    uint16_t minimum_erl;
+    uint16_t erl_step;
+    uint16_t max_noise_floor;
+    uint16_t Det_threshold;
+    uint16_t SPDET_Far;
+    uint16_t SPDET_mic;
+    uint16_t SPDET_xclip;
+    uint16_t DENS_tail_alpha;
+    uint16_t DENS_tail_portion;
+    uint16_t DENS_gamma_e_alpha;
+    uint16_t DENS_gamma_e_dt;
+    uint16_t DENS_gamma_e_low;
+    uint16_t DENS_gamma_e_rescue;
+    uint16_t DENS_gamma_e_high;
+    uint16_t DENS_spdet_near;
+    uint16_t DENS_spdet_act;
+    uint16_t DENS_gamma_n;
+    uint16_t DENS_NFE_blocksize;
+    uint16_t DENS_limit_NS;
+    uint16_t DENS_NL_atten;
+    uint16_t DENS_CNI_Level;
+    uint16_t WB_echo_ratio;
+    uint16_t rxPcmFiltEnableFlag;
+    uint16_t rxPcmFiltCoeff[7];
+    uint16_t txPcmFiltEnableFlag;
+    uint16_t txPcmFiltCoeff[7];
+    uint16_t rxiirFiltNumCoeff[18];
+    uint16_t rxiirFiltDenCoeff[12];
+    uint16_t rxiirFiltNumShiftFactor[4];
+    uint16_t txiirFiltNumCoeff[18];
+    uint16_t txiirFiltDenCoeff[12];
+    uint16_t txiirFiltNumShiftFactor[4];
+    uint16_t ecparameterupdated;
+};
+
+struct d_table_st {
+    uint16_t routing_mode_config;
+    uint16_t internal_codec_config;
+    uint16_t external_codec_config;
+    uint16_t pcm_ctrl;
+    uint16_t codec_intf_ctrl;
+    uint16_t dma_path_ctrl;
+    uint16_t eight_khz_int_mode;
+    uint16_t rx_codec_stereo_config;
+    uint16_t tx_codec_stereo_config;
+    uint16_t ECNS;
+    uint16_t unk0;
+};
+
+struct be_table_st {
+    uint16_t Operator_ID;
+    uint16_t Vocpath;
+    uint16_t volume_level;
+    uint16_t codecTxGain;
+    uint16_t codecRxGain;
+    uint16_t codecSTGain;
+    uint16_t txVolume;
+    uint16_t rxVolume;
+    uint16_t pcmFormatCtrl;
+    uint16_t ecSwitch;
+    uint16_t ecMode;
+    uint16_t ecStartupMuteHangoverThres;
+    uint16_t ecFarendHangoverThres;
+    uint16_t esecDoubletalkHangoverThres;
+    uint16_t hecDoubletalkHangoverThres;
+    uint16_t aecDoubletalkHangoverThres;
+    uint16_t ecStartupMuteMode;
+    uint16_t ecMuteOverride;
+    uint16_t ecStartupErleThres;
+    uint16_t ecForceHalfDuplex;
+    uint16_t esecResetThres;
+    uint16_t hecResetThres;
+    uint16_t aecResetThres;
+    uint16_t ecInputSampOffset;
+    uint16_t rxAgcEnableFlag;
+    uint16_t compFlinkStaticGain;
+    uint16_t compFlinkAIGFlag;
+    uint16_t expFlinkThreshold;
+    uint16_t expFlinkSlope;
+    uint16_t compFlinkThreshold;
+    uint16_t compFlinkSlope;
+    uint16_t rxAvcEnableFlag;
+    uint16_t avcRlinkSensitivityOffset;
+    uint16_t avcFlinkHeadroom;
+    uint16_t txAgcEnableFlag;
+    uint16_t compRlinkStaticGain;
+    uint16_t compRlinkAIGFlag;
+    uint16_t expRlinkThreshold;
+    uint16_t expRlinkSlope;
+    uint16_t compRlinkThreshold;
+    uint16_t compRlinkSlope;
+    uint16_t nsSwitch;
+    uint16_t nsMinGain;
+    uint16_t nsSlope;
+    uint16_t nsSNRThreshold;
+    uint16_t rxPcmFiltCoeff[6];
+    uint16_t txPcmFiltCoeff[6];
+    uint16_t ec_reset_flag;
+    uint16_t Reserved[5];
+    uint16_t MCC_Val;
+    uint16_t MNC_Val; 
+};
+
+struct au_table_st {    
+    struct register_table_s register_table[26]; /* Add 1 .. Add 26 */   
+    uint8_t Total_number;
+    uint8_t Delay_number;
+    uint8_t Delay_time;
+    uint8_t extra[12];
 };
 
 /***********************************************************************************

@@ -53,85 +53,11 @@
 #define PCM_CTL_DEVICE      "/dev/msm_pcm_ctl"
 #define PREPROC_CTL_DEVICE  "/dev/msm_audpre"
 
-#define MAX_MODE_NAME_LENGTH 32
-
-struct header_s {
-    uint8_t Header;
-    char Mode[MAX_MODE_NAME_LENGTH];
-};
-
-struct register_table_s {
-    uint8_t Address;
-    uint8_t Reg;
-};
-
-struct au_table_st {    
-    struct register_table_s register_table[26]; /* Add 1 .. Add 26 */   
-    uint8_t Total_number;
-    uint8_t Delay_number;
-    uint8_t Delay_time;
-    uint8_t extra[12];
-};
-
 struct au_table_s {
     union {
         struct au_table_st table;
         char   array[0x80];
     };
-};
-
-struct be_table_st {
-    uint16_t Operator_ID;
-    uint16_t Vocpath;
-    uint16_t volume_level;
-    uint16_t codecTxGain;
-    uint16_t codecRxGain;
-    uint16_t codecSTGain;
-    uint16_t txVolume;
-    uint16_t rxVolume;
-    uint16_t pcmFormatCtrl;
-    uint16_t ecSwitch;
-    uint16_t ecMode;
-    uint16_t ecStartupMuteHangoverThres;
-    uint16_t ecFarendHangoverThres;
-    uint16_t esecDoubletalkHangoverThres;
-    uint16_t hecDoubletalkHangoverThres;
-    uint16_t aecDoubletalkHangoverThres;
-    uint16_t ecStartupMuteMode;
-    uint16_t ecMuteOverride;
-    uint16_t ecStartupErleThres;
-    uint16_t ecForceHalfDuplex;
-    uint16_t esecResetThres;
-    uint16_t hecResetThres;
-    uint16_t aecResetThres;
-    uint16_t ecInputSampOffset;
-    uint16_t rxAgcEnableFlag;
-    uint16_t compFlinkStaticGain;
-    uint16_t compFlinkAIGFlag;
-    uint16_t expFlinkThreshold;
-    uint16_t expFlinkSlope;
-    uint16_t compFlinkThreshold;
-    uint16_t compFlinkSlope;
-    uint16_t rxAvcEnableFlag;
-    uint16_t avcRlinkSensitivityOffset;
-    uint16_t avcFlinkHeadroom;
-    uint16_t txAgcEnableFlag;
-    uint16_t compRlinkStaticGain;
-    uint16_t compRlinkAIGFlag;
-    uint16_t expRlinkThreshold;
-    uint16_t expRlinkSlope;
-    uint16_t compRlinkThreshold;
-    uint16_t compRlinkSlope;
-    uint16_t nsSwitch;
-    uint16_t nsMinGain;
-    uint16_t nsSlope;
-    uint16_t nsSNRThreshold;
-    uint16_t rxPcmFiltCoeff[6];
-    uint16_t txPcmFiltCoeff[6];
-    uint16_t ec_reset_flag;
-    uint16_t Reserved[5];
-    uint16_t MCC_Val;
-    uint16_t MNC_Val; 
 };
 
 struct be_table_s {
@@ -141,108 +67,11 @@ struct be_table_s {
     };
 };
 
-struct d_table_st {
-    uint16_t routing_mode_config;
-    uint16_t internal_codec_config;
-    uint16_t external_codec_config;
-    uint16_t pcm_ctrl;
-    uint16_t codec_intf_ctrl;
-    uint16_t dma_path_ctrl;
-    uint16_t eight_khz_int_mode;
-    uint16_t rx_codec_stereo_config;
-    uint16_t tx_codec_stereo_config;
-    uint16_t ECNS;
-    uint16_t unk0;
-};
-
 struct d_table_s {
     union {
         struct d_table_st table;
         uint16_t array[0xB];        // Size = 0x8 on some devices like diamond.
     };
-};
-
-struct fg_table_st {
-    uint16_t volume_level;
-    uint16_t codecTxGain;
-    uint16_t codecRxGain;
-    uint16_t codecSTGain;
-    uint16_t txVolume;
-    uint16_t rxVolume;
-    uint16_t rxAgcEnableFlag;
-    uint16_t compFlinkStaticGain;
-    uint16_t compFlinkAIGFlag;
-    uint16_t expFlinkThreshold;
-    uint16_t expFlinkSlope;
-    uint16_t compFlinkThreshold;
-    uint16_t compFlinkSlope;
-    uint16_t comFlinkRmsTav;
-    uint16_t compFlinkReleaseK;
-    uint16_t compFlinkAIGMin;
-    uint16_t compFlinkAIGMax;
-    uint16_t rxAvcEnableFlag;
-    uint16_t avcRlinkSensitivityOffset;
-    uint16_t avcFlinkHeadroom;
-    uint16_t txAgcEnableFlag;
-    uint16_t compRlinkStaticGain;
-    uint16_t compRlinkAIGFlag;
-    uint16_t expRlinkThreshold;
-    uint16_t expRlinkSlope;
-    uint16_t compRlinkThreshold;
-    uint16_t compRlinkSlope;
-    uint16_t comRlinkRmsTav;
-    uint16_t compRlinkReleaseK;
-    uint16_t compRlinkAIGMin;
-    uint16_t compRlinkAIGMax;
-    uint16_t NLPP_limit;
-    uint16_t NLPP_gain;
-    uint16_t AF_limit;
-    uint16_t HS_mode;
-    uint16_t Tuning_mode;
-    uint16_t echo_path_delay;
-    uint16_t OutputGain;
-    uint16_t InputGain;
-    uint16_t AF_twoalpha;
-    uint16_t AF_erl;
-    uint16_t AF_taps;
-    uint16_t AF_present_coefs;
-    uint16_t AF_offset;
-    uint16_t AF_erl_bg;
-    uint16_t AF_taps_bg;
-    uint16_t PCD_threshold;
-    uint16_t minimum_erl;
-    uint16_t erl_step;
-    uint16_t max_noise_floor;
-    uint16_t Det_threshold;
-    uint16_t SPDET_Far;
-    uint16_t SPDET_mic;
-    uint16_t SPDET_xclip;
-    uint16_t DENS_tail_alpha;
-    uint16_t DENS_tail_portion;
-    uint16_t DENS_gamma_e_alpha;
-    uint16_t DENS_gamma_e_dt;
-    uint16_t DENS_gamma_e_low;
-    uint16_t DENS_gamma_e_rescue;
-    uint16_t DENS_gamma_e_high;
-    uint16_t DENS_spdet_near;
-    uint16_t DENS_spdet_act;
-    uint16_t DENS_gamma_n;
-    uint16_t DENS_NFE_blocksize;
-    uint16_t DENS_limit_NS;
-    uint16_t DENS_NL_atten;
-    uint16_t DENS_CNI_Level;
-    uint16_t WB_echo_ratio;
-    uint16_t rxPcmFiltEnableFlag;
-    uint16_t rxPcmFiltCoeff[7];
-    uint16_t txPcmFiltEnableFlag;
-    uint16_t txPcmFiltCoeff[7];
-    uint16_t rxiirFiltNumCoeff[18];
-    uint16_t rxiirFiltDenCoeff[12];
-    uint16_t rxiirFiltNumShiftFactor[4];
-    uint16_t txiirFiltNumCoeff[18];
-    uint16_t txiirFiltDenCoeff[12];
-    uint16_t txiirFiltNumShiftFactor[4];
-    uint16_t ecparameterupdated;
 };
 
 struct fg_table_s {
@@ -277,9 +106,11 @@ static uint8_t HVCCT_max_index = 0;
 static struct c_table_s*     CE_Acoustic_Table = NULL;             /* c_table ('C') */
 static uint8_t CEAT_max_index  = 0;
 
+/* Communication with kernel */
 static int acousticfd = 0;
 static int mNumSndEndpoints;
 static struct msm_snd_endpoint *mSndEndpoints;
+static struct msm_acoustic_capabilities device_capabilities;
 
 static bool mInit = false;
 
@@ -341,6 +172,19 @@ static int openacousticfd(void) {
     } 
     return 0;
 }
+
+static int get_device_capabilities(void) {
+    if ( ioctl(acousticfd, ACOUSTIC_GET_CAPABILITIES, &device_capabilities) < 0) {
+        LOGE("ACOUSTIC_GET_CAPABILITIES error.");
+        return -EIO;
+    } 
+    LOGV("Device capabilities :");
+    LOGV("- Htc voc cal fields per params : %d", device_capabilities.htc_voc_cal_fields_per_param);
+    LOGV("- Dual mic supported : %s", (device_capabilities.bDualMicSupported)?"true":"false");
+    return 0;
+}
+
+
 
 static int get_pga_gain_for_fm_profile(int profile, int current_pga_gain)
 {
@@ -1209,6 +1053,12 @@ int htc_acoustic_init(void)
         return rc;
     }
 
+    /* Get device capabilities */
+    rc = get_device_capabilities();
+    if ( rc < 0 ) {
+        return rc;
+    }
+
     /* Read parameters from csv file */
     rc = ReadAudioParaFromFile();
     if ( rc < 0 ) {
@@ -1261,47 +1111,7 @@ int htc_acoustic_init(void)
         // Close snd
         close(m7xsnddriverfd);
 
-/* TODO : Check and enable ??
-        int AUTO_VOLUME_ENABLED = 1; // setting enabled as default
-
-        static const char *const path = "/system/etc/AutoVolumeControl.txt";
-        int txtfd;
-        struct stat st;
-        char *read_buf;
-
-        txtfd = open(path, O_RDONLY);
-        if (txtfd < 0) {
-            LOGE("failed to open AUTO_VOLUME_CONTROL %s: %s (%d)",
-                  path, strerror(errno), errno);
-        }
-        else {
-            if (fstat(txtfd, &st) < 0) {
-                LOGE("failed to stat %s: %s (%d)",
-                      path, strerror(errno), errno);
-                close(txtfd);
-            }
-
-            read_buf = (char *) mmap(0, st.st_size,
-                        PROT_READ | PROT_WRITE,
-                        MAP_PRIVATE,
-                        txtfd, 0);
-
-            if (read_buf == MAP_FAILED) {
-                LOGE("failed to mmap parameters file: %s (%d)",
-                      strerror(errno), errno);
-                close(txtfd);
-            }
-
-            if(read_buf[0] =='0')
-               AUTO_VOLUME_ENABLED = 0;
-
-            munmap(read_buf, st.st_size);
-            close(txtfd);
-        }
-
-        ioctl(m7xsnddriverfd, SND_AVC_CTL, &AUTO_VOLUME_ENABLED);
-        ioctl(m7xsnddriverfd, SND_AGC_CTL, &AUTO_VOLUME_ENABLED);
-*/
+        /* TODO : AGC for TI A2026 from csv file when A2026 driver present in kernel */
     }
 	else LOGE("Could not open MSM SND driver.");
 
