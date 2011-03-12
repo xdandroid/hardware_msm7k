@@ -40,13 +40,14 @@
 
 #include "libacoustic.h"
 
-//#define AUDIO_PARA_DEFAULT_FILENAME "/system/etc/AudioPara.csv"
-#define AUDIO_PARA_DEFAULT_FILENAME   "/sdcard/AudioPara3.csv"
-//#define AUDIO_FILTER_DEFAULT_FILENAME "/system/etc/AudioFilter.csv"
-#define AUDIO_FILTER_DEFAULT_FILENAME "/sdcard/AudioFilterTable.csv"
-//#define AUDIO_PREPROCESS_DEFAULT_FILENAME "/system/etc/AudioPreProcessTable.csv"
-#define AUDIO_PREPROCESS_DEFAULT_FILENAME "/sdcard/AudioPreProcessTable.csv"
+#define AUDIO_PARA_CUSTOM_FILENAME        "/sdcard/AudioPara3.csv"
+#define AUDIO_PARA_DEFAULT_FILENAME       "/system/etc/AudioPara3.csv"
 
+#define AUDIO_FILTER_CUSTOM_FILENAME      "/sdcard/AudioFilterTable.csv"
+#define AUDIO_FILTER_DEFAULT_FILENAME     "/system/etc/AudioFilterTable.csv"
+
+#define AUDIO_PREPROCESS_CUSTOM_FILENAME  "/sdcard/AudioPreProcessTable.csv"
+#define AUDIO_PREPROCESS_DEFAULT_FILENAME "/system/etc/AudioPreProcessTable.csv"
 
 #define PCM_OUT_DEVICE      "/dev/msm_pcm_out"
 #define PCM_IN_DEVICE       "/dev/msm_pcm_in"
@@ -147,6 +148,7 @@ static int SND_DEVICE_BT_EC_OFF;
 static int SND_DEVICE_IDLE;
 
 /* Specific pass-through device for special ops */
+static int SND_DEVICE_REC_INC_MIC = 252;
 static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
 static int SND_DEVICE_PLAYBACK_HEADSET = 254;
 
@@ -163,7 +165,8 @@ static bool bCurrentAUXBypassReqState = 0;
  *  Privates functions
  *
  ***********************************************************************************/
-static int openacousticfd(void) {
+static int openacousticfd(void)
+{
     acousticfd = open(MSM_HTC_ACOUSTIC_WINCE, O_RDWR);
     if ( acousticfd < 0 ) {
         LOGE("Error opening dev %s (fd = %d). Error %s (%d)", MSM_HTC_ACOUSTIC_WINCE, acousticfd,
@@ -173,7 +176,8 @@ static int openacousticfd(void) {
     return 0;
 }
 
-static int get_device_capabilities(void) {
+static int get_device_capabilities(void)
+{
     if ( ioctl(acousticfd, ACOUSTIC_GET_CAPABILITIES, &device_capabilities) < 0) {
         LOGE("ACOUSTIC_GET_CAPABILITIES error.");
         return -EIO;
@@ -184,6 +188,52 @@ static int get_device_capabilities(void) {
     return 0;
 }
 
+static int get_sound_endpoints(void)
+{
+    int cnt, rc = -EIO;
+    int m7xsnddriverfd;
+    struct msm_snd_endpoint *ept;
+
+    m7xsnddriverfd = open("/dev/msm_snd", O_RDWR);
+    if (m7xsnddriverfd >= 0) {
+        rc = ioctl(m7xsnddriverfd, SND_GET_NUM_ENDPOINTS, &mNumSndEndpoints);
+        if (rc >= 0) {
+            mSndEndpoints = malloc(mNumSndEndpoints * sizeof(struct msm_snd_endpoint));
+            mInit = true;
+            LOGV("constructed (%d SND endpoints)", mNumSndEndpoints);
+            struct msm_snd_endpoint *ept = mSndEndpoints;
+            for (cnt = 0; cnt < mNumSndEndpoints; cnt++, ept++) {
+                ept->id = cnt;
+                ioctl(m7xsnddriverfd, SND_GET_ENDPOINT, ept);
+                LOGV("cnt = %d ept->name = %s ept->id = %d\n", cnt, ept->name, ept->id);
+#define CHECK_FOR(desc) if (!strcmp(ept->name, #desc)) SND_DEVICE_##desc = ept->id;
+                CHECK_FOR(CURRENT)
+                CHECK_FOR(HANDSET)
+                CHECK_FOR(SPEAKER)
+                CHECK_FOR(BT)
+                CHECK_FOR(BT_EC_OFF)
+                CHECK_FOR(HEADSET)
+                CHECK_FOR(CARKIT)
+                CHECK_FOR(TTY_FULL)
+                CHECK_FOR(TTY_VCO)
+                CHECK_FOR(TTY_HCO)
+                CHECK_FOR(NO_MIC_HEADSET)
+                CHECK_FOR(FM_HEADSET)
+                CHECK_FOR(FM_SPEAKER)
+                CHECK_FOR(HEADSET_AND_SPEAKER)
+                CHECK_FOR(IDLE)
+#undef CHECK_FOR
+            }
+        }
+        else LOGE("Could not retrieve number of MSM SND endpoints.");
+
+        // Close snd
+        close(m7xsnddriverfd);
+    }
+	else LOGE("Could not open MSM SND driver.");
+
+    return rc;
+}
 
 
 static int get_pga_gain_for_fm_profile(int profile, int current_pga_gain)
@@ -281,15 +331,6 @@ static int UpdateAudioAdieTable(bool bAudioUplinkReq, int paramR1, bool bEnableH
         LOGE("ACOUSTIC_PCOM_UPDATE_AUDIO error.");
         return -EIO;
     } 
-    /* Generate PCOM_UPDATE_AUDIO 0x80 */
-    // TODO : Does this belongs to UpdateAdie or to fake pcm open ?!?
-#if 0
-    pcom_update[0] = 0x80;
-    if ( ioctl(acousticfd, ACOUSTIC_PCOM_UPDATE_AUDIO, &pcom_update) < 0) {
-        LOGE("ACOUSTIC_PCOM_UPDATE_AUDIO error.");
-        return -EIO;
-    } 
-#endif
 
     bCurrentAudioUplinkState  = bAudioUplinkReq;
     bCurrentEnableHSSDState   = bEnableHSSD;
@@ -414,21 +455,28 @@ static int ReadAudioParaFromFile(void)
     char *next_str, *current_str;
     int csvfd;
     struct htc_voc_cal_table htc_voc_cal_tbl;
-    uint16_t  htc_voc_cal_tbl_field_size = 0;
     uint16_t* htc_voc_cal_tbl_conv = NULL;
 
-    static const char *const path =
-        AUDIO_PARA_DEFAULT_FILENAME;
+    static const char *path =
+        AUDIO_PARA_CUSTOM_FILENAME;
 
     csvfd = open(path, O_RDONLY);
     if (csvfd < 0) {
-        /* Failed to open parameters file ... */
+        /* Failed to open custom parameters file, fallback to the default file ... */        
         LOGE("Failed to open %s. Error %s (%d)\n",
              path, strerror(errno), errno);
-        return -1;
-    } else {
-        LOGE("Successfully opened %s\n", path);
+
+        LOGE("Trying with default file");
+        path = AUDIO_PARA_DEFAULT_FILENAME;
+        csvfd = open(path, O_RDONLY);
+        if (csvfd < 0) {
+            LOGE("Failed to open %s. Error %s (%d)\n",
+                 path, strerror(errno), errno);
+            return -1;
+        }
     }
+    
+    LOGE("Successfully opened %s\n", path);
 
     if (fstat(csvfd, &st) < 0) {
         LOGE("Failed to stat %s: %s (%d)\n",
@@ -448,13 +496,7 @@ static int ReadAudioParaFromFile(void)
         close(csvfd);
         return -1;
     }
-
-    if ( ioctl(acousticfd, ACOUSTIC_GET_HTC_VOC_CAL_FIELD_SIZE, &htc_voc_cal_tbl_field_size) < 0) {
-        LOGE("ACOUSTIC_GET_HTC_VOC_CAL_FIELD_SIZE error.");
-        return -EIO;
-    } 
-    LOGV("HTC_VOC_CAL_FIELD_SIZE = %d", htc_voc_cal_tbl_field_size);
-    
+   
 
     if ( Audio_Path_Table == NULL ) {
         Audio_Path_Table = (struct au_table_s*) malloc(32 * sizeof(struct au_table_s) );  // 0x1000
@@ -539,22 +581,26 @@ static int ReadAudioParaFromFile(void)
      * Note that this is the only one field size that varies between those devices.
      * All other field types are same size.
      */
-    if ( htc_voc_cal_tbl_field_size < 0xB ) {
+    if ( device_capabilities.htc_voc_cal_fields_per_param < 0xB ) {
         int field;
         uint16_t* htc_voc_cal_tbl_conv_field;
         /* Convert table to required field size */
-        htc_voc_cal_tbl_conv = (uint16_t*) malloc(HVCCT_max_index * htc_voc_cal_tbl_field_size * sizeof(uint16_t));
+        htc_voc_cal_tbl_conv = (uint16_t*) malloc(HVCCT_max_index * device_capabilities.htc_voc_cal_fields_per_param * sizeof(uint16_t));
         if ( htc_voc_cal_tbl_conv == NULL ) {
             goto exit;
         }
+
         for (field=0; field<HVCCT_max_index; field++) {
-            htc_voc_cal_tbl_conv_field = &htc_voc_cal_tbl_conv[field * htc_voc_cal_tbl_field_size];
+            htc_voc_cal_tbl_conv_field = &htc_voc_cal_tbl_conv[field * device_capabilities.htc_voc_cal_fields_per_param];
             memcpy((void*) htc_voc_cal_tbl_conv_field,
-                     HTC_VOC_CAL_CODEC_TABLE_Table[field].array, htc_voc_cal_tbl_field_size * sizeof(uint16_t));
+                           HTC_VOC_CAL_CODEC_TABLE_Table[field].array,
+                           device_capabilities.htc_voc_cal_fields_per_param * sizeof(uint16_t));
         }
-        htc_voc_cal_tbl.size = HVCCT_max_index * htc_voc_cal_tbl_field_size * sizeof(uint16_t);
+        /* Fill the stucture with converted table that will be passed to kernel for update */
+        htc_voc_cal_tbl.size = HVCCT_max_index * device_capabilities.htc_voc_cal_fields_per_param * sizeof(uint16_t);
         htc_voc_cal_tbl.pArray = htc_voc_cal_tbl_conv;
     } else {
+        /* Fill the stucture with table that will be passed to kernel for update */
         htc_voc_cal_tbl.size = HVCCT_max_index * sizeof(struct d_table_s);
         htc_voc_cal_tbl.pArray = HTC_VOC_CAL_CODEC_TABLE_Table->array;
     }
@@ -622,9 +668,6 @@ static int check_and_set_audpre_parameters(char *buf, int size)
             goto token_err;}
 
         tx_iir_cfg[samp_index].num_bands = (uint16_t)strtol(p, &ps, 16);
-/*
-        tx_iir_cfg[samp_index].cmd_id = 0;
-*/
     } else if(buf[0] == 'B')  {
         /* AGC filter */
         if (!(p = strtok(buf, ",")))
@@ -661,21 +704,6 @@ static int check_and_set_audpre_parameters(char *buf, int size)
             if (!(p = strtok(NULL, seps)))
                 goto token_err;
             }
-/*
-        for (i = 0; i < 19; i++) {
-            tx_agc_cfg[samp_index].agc_params[i] = (uint16_t)strtol(p, &ps, 16);
-            if (!(p = strtok(NULL, seps)))
-                goto token_err;
-            }
-
-        tx_agc_cfg[samp_index].cmd_id = (uint16_t)strtol(p, &ps, 16);
-        if (!(p = strtok(NULL, seps)))
-            goto token_err;
-
-        tx_agc_cfg[samp_index].tx_agc_param_mask = (uint16_t)strtol(p, &ps, 16);
-        if (!(p = strtok(NULL, seps)))
-            goto token_err;
-*/
     } else if ((buf[0] == 'C')) {       
         /* This is the NS record we are looking for.  Tokenize it */
         if (!(p = strtok(buf, ",")))
@@ -693,15 +721,6 @@ static int check_and_set_audpre_parameters(char *buf, int size)
             goto token_err;
 
         /* Table description */
-/*
-        if (!(p = strtok(NULL, seps)))
-            goto token_err;
-        ns_cfg[samp_index].cmd_id = (uint16_t)strtol(p, &ps, 16);
-
-        if (!(p = strtok(NULL, seps)))
-            goto token_err;
-        ns_cfg[samp_index].ec_mode_new = (uint16_t)strtol(p, &ps, 16);
-*/
         if (!(p = strtok(NULL, seps)))
             goto token_err;
         ns_cfg[samp_index].dens_gamma_n = (uint16_t)strtol(p, &ps, 16);
@@ -729,11 +748,10 @@ static int check_and_set_audpre_parameters(char *buf, int size)
         if (!(p = strtok(NULL, seps)))
             goto token_err;
     }
-//    }
     return 0;
 
 token_err:
-    LOGE("malformatted pcm control buffer");
+    LOGE("malformatted preprocessor control buffer");
     return -EINVAL;
 }
 
@@ -745,15 +763,26 @@ static int get_audpre_table(void)
     int csvfd;
 
     LOGI("get_audpre_table");
-    static const char *const path =
-            AUDIO_PREPROCESS_DEFAULT_FILENAME;
+    static const char *path =
+            AUDIO_PREPROCESS_CUSTOM_FILENAME;
+
     csvfd = open(path, O_RDONLY);
     if (csvfd < 0) {
-        /* failed to open normal acoustic file ... */
-        LOGE("failed to open AUDIO_NORMAL_PREPROCESS %s: %s (%d).",
+        /* Failed to open custom parameters file, fallback to the default file ... */        
+        LOGE("Failed to open AUDIO_NORMAL_PREPROCESS %s. Error %s (%d)\n",
              path, strerror(errno), errno);
-        return -1;
-    } else LOGI("open %s success.", path);
+
+        LOGE("Trying with default file");
+        path = AUDIO_PREPROCESS_DEFAULT_FILENAME;
+        csvfd = open(path, O_RDONLY);
+        if (csvfd < 0) {
+            LOGE("Failed to open %s. Error %s (%d)\n",
+                 path, strerror(errno), errno);
+            return -1;
+        }
+    }
+    
+    LOGE("Successfully opened %s\n", path);
 
     if (fstat(csvfd, &st) < 0) {
         LOGE("failed to stat %s: %s (%d).",
@@ -964,15 +993,26 @@ static int get_audpp_filter(void)
     int csvfd;
 
     LOGI("get_audpp_filter");
-    static const char *const path =
-            AUDIO_FILTER_DEFAULT_FILENAME;
+    static const char *path =
+            AUDIO_FILTER_CUSTOM_FILENAME;
+
     csvfd = open(path, O_RDONLY);
     if (csvfd < 0) {
-        /* failed to open normal acoustic file ... */
-        LOGE("failed to open AUDIO_NORMAL_FILTER %s: %s (%d).",
+        /* Failed to open custom parameters file, fallback to the default file ... */        
+        LOGE("Failed to open AUDIO_NORMAL_FILTER %s. Error %s (%d)\n",
              path, strerror(errno), errno);
-        return -1;
-    } else LOGI("open %s success.", path);
+
+        LOGE("Trying with default file");
+        path = AUDIO_FILTER_DEFAULT_FILENAME;
+        csvfd = open(path, O_RDONLY);
+        if (csvfd < 0) {
+            LOGE("Failed to open %s. Error %s (%d)\n",
+                 path, strerror(errno), errno);
+            return -1;
+        }
+    }
+    
+    LOGE("Successfully opened %s\n", path);
 
     if (fstat(csvfd, &st) < 0) {
         LOGE("failed to stat %s: %s (%d).",
@@ -1041,9 +1081,6 @@ static unsigned calculate_audpre_table_index(unsigned index)
 int htc_acoustic_init(void)
 {
     int rc = 0;
-    int cnt;
-    int m7xsnddriverfd;
-    struct msm_snd_endpoint *ept;
 
     LOGV("Running custom built libhtc_acoustic.so");
 
@@ -1074,47 +1111,11 @@ int htc_acoustic_init(void)
     if ( rc == 0 ) {
         audpre_filter_inited = true;
     }
+    /* TODO : AGC for TI A2026 from csv file when A2026 driver present in kernel */
 
-    m7xsnddriverfd = open("/dev/msm_snd", O_RDWR);
-    if (m7xsnddriverfd >= 0) {
-        int rc = ioctl(m7xsnddriverfd, SND_GET_NUM_ENDPOINTS, &mNumSndEndpoints);
-        if (rc >= 0) {
-            mSndEndpoints = malloc(mNumSndEndpoints * sizeof(struct msm_snd_endpoint));
-            mInit = true;
-            LOGV("constructed (%d SND endpoints)", mNumSndEndpoints);
-            struct msm_snd_endpoint *ept = mSndEndpoints;
-            for (cnt = 0; cnt < mNumSndEndpoints; cnt++, ept++) {
-                ept->id = cnt;
-                ioctl(m7xsnddriverfd, SND_GET_ENDPOINT, ept);
-                LOGV("cnt = %d ept->name = %s ept->id = %d\n", cnt, ept->name, ept->id);
-#define CHECK_FOR(desc) if (!strcmp(ept->name, #desc)) SND_DEVICE_##desc = ept->id;
-                CHECK_FOR(CURRENT)
-                CHECK_FOR(HANDSET)
-                CHECK_FOR(SPEAKER)
-                CHECK_FOR(BT)
-                CHECK_FOR(BT_EC_OFF)
-                CHECK_FOR(HEADSET)
-                CHECK_FOR(CARKIT)
-                CHECK_FOR(TTY_FULL)
-                CHECK_FOR(TTY_VCO)
-                CHECK_FOR(TTY_HCO)
-                CHECK_FOR(NO_MIC_HEADSET)
-                CHECK_FOR(FM_HEADSET)
-                CHECK_FOR(FM_SPEAKER)
-                CHECK_FOR(HEADSET_AND_SPEAKER)
-                CHECK_FOR(IDLE)
-#undef CHECK_FOR
-            }
-        }
-        else LOGE("Could not retrieve number of MSM SND endpoints.");
-
-        // Close snd
-        close(m7xsnddriverfd);
-
-        /* TODO : AGC for TI A2026 from csv file when A2026 driver present in kernel */
-    }
-	else LOGE("Could not open MSM SND driver.");
-
+    /* Retrieve available sound endpoints IDs from kernel */
+    rc = get_sound_endpoints();
+    
     return rc;
 }
 
@@ -1387,6 +1388,9 @@ int msm72xx_set_acoustic_table(int device, int volume)
         } else if( device == SND_DEVICE_PLAYBACK_HANDSFREE ) {
             LOGV("Acoustic profile : PLAYBACK_HANDSFREE");
             out_path = PLAYBACK_HANDSFREE;
+        } else if( device == SND_DEVICE_REC_INC_MIC ) {
+            LOGV("Acoustic profile : REC_INC_MIC");
+            out_path = REC_INC_MIC;
         } else if( device == SND_DEVICE_IDLE ) {
             LOGV("Acoustic profile : EARCUPLE");
             out_path = EARCUPLE;
