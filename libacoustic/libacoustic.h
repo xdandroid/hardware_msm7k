@@ -49,6 +49,20 @@ struct htc_voc_cal_table {
     int       size;
 };
 
+enum {
+    PCOM_UPDATE_REQ = 0,
+    ADIE_FORCE8K_REQ,
+    ADIE_FORCE_ADIE_AWAKE_REQ,
+    ADIE_FORCE_ADIE_UPDATE_REQ,
+    ADIE_UPDATE_AUDIO_METHOD,
+    
+} AUDIO_UPDATE_REQ_TYPE;
+
+struct audio_update_req {
+    int type;       /* one of the AUDIO_UPDATE_REQ_TYPE */
+    int value;      /* For PCOM_UPDATE, dex data. For ADIE updates, value of the setting */
+};
+
 /* IOCTLs */
 #define ACOUSTIC_IOCTL_MAGIC 'p'
 #define ACOUSTIC_ARM11_DONE	                    _IOW(ACOUSTIC_IOCTL_MAGIC, 22, unsigned int)
@@ -57,8 +71,8 @@ struct htc_voc_cal_table {
 #define ACOUSTIC_UPDATE_VOLUME_TABLE            _IOW(ACOUSTIC_IOCTL_MAGIC,  2, uint16_t* )
 #define ACOUSTIC_UPDATE_CE_TABLE                _IOW(ACOUSTIC_IOCTL_MAGIC,  3, uint16_t* )
 #define ACOUSTIC_UPDATE_AUDIO_PATH_TABLE        _IOW(ACOUSTIC_IOCTL_MAGIC,  4, uint16_t* )
+#define ACOUSTIC_UPDATE_AUDIO_SETTINGS          _IOW(ACOUSTIC_IOCTL_MAGIC,  5, struct audio_update_req* )
 #define ACOUSTIC_UPDATE_HTC_VOC_CAL_CODEC_TABLE _IOW(ACOUSTIC_IOCTL_MAGIC,  6, struct htc_voc_cal_table* )
-#define ACOUSTIC_PCOM_UPDATE_AUDIO              _IOW(ACOUSTIC_IOCTL_MAGIC,  7, uint16_t* )
 #define ACOUSTIC_GET_CAPABILITIES               _IOW(ACOUSTIC_IOCTL_MAGIC,  8, struct msm_acoustic_capabilities* )
 
 #define ACOUSTIC_SET_HW_AUDIO_PATH          _IOW(ACOUSTIC_IOCTL_MAGIC,  10, struct msm_audio_path* )

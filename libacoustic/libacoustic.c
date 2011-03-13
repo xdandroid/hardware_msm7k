@@ -38,6 +38,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#include <linux/msm_audio.h>
+
 #include "libacoustic.h"
 
 #define AUDIO_PARA_CUSTOM_FILENAME        "/sdcard/AudioPara3.csv"
@@ -153,6 +155,7 @@ static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
 static int SND_DEVICE_PLAYBACK_HEADSET = 254;
 
 static int mCurrentSndDevice = -1;
+static int mCurrentVolume = 0;
 static int mCurrent_Adie_PGA_Gain = 1;
 
 
@@ -326,11 +329,11 @@ static int UpdateAudioAdieTable(bool bAudioUplinkReq, int paramR1, bool bEnableH
     while ( table_num < APT_max_index );
 
     /* Generate PCOM_UPDATE_AUDIO 0x1 */
-    pcom_update[0] = 0x1;
-    if ( ioctl(acousticfd, ACOUSTIC_PCOM_UPDATE_AUDIO, &pcom_update) < 0) {
-        LOGE("ACOUSTIC_PCOM_UPDATE_AUDIO error.");
+    struct audio_update_req req = {.type = PCOM_UPDATE_REQ, .value = 0x1};
+    if ( ioctl(acousticfd, ACOUSTIC_UPDATE_AUDIO_SETTINGS, &req) < 0) {
+        LOGE("ACOUSTIC_UPDATE_AUDIO_SETTINGS error.");
         return -EIO;
-    } 
+    }     
 
     bCurrentAudioUplinkState  = bAudioUplinkReq;
     bCurrentEnableHSSDState   = bEnableHSSD;
@@ -1166,7 +1169,7 @@ int msm72xx_enable_audpp(uint16_t enable_mask, uint32_t device)
 
     if (!audpp_filter_inited) return -EINVAL;
 
-    LOGI("SET DEVICE - %d",device);
+    LOGI("msm72xx_enable_audpp : SET DEVICE - %d",device);
     if(device == (uint32_t)SND_DEVICE_SPEAKER)
     {
         device_id = 0;
@@ -1332,6 +1335,7 @@ int msm72xx_enable_audpre(int acoustic_flags, int audpre_index, int tx_iir_index
          return -EPERM;
     }
      /*Setting AUDPRE_ENABLE*/
+    LOGE("msm72xx_enable_audpre: 0x%04x", acoustic_flags);
     if (ioctl(fd, AUDIO_ENABLE_AUDPRE, &acoustic_flags) < 0)
     {
        LOGE("set AUDPRE_ENABLE error.");
@@ -1341,7 +1345,6 @@ int msm72xx_enable_audpre(int acoustic_flags, int audpre_index, int tx_iir_index
     return 0;
 }
 
-
 int msm72xx_set_acoustic_table(int device, int volume)
 {
     struct fg_table_s* table = NULL;
@@ -1349,6 +1352,12 @@ int msm72xx_set_acoustic_table(int device, int volume)
     int out_path = device;
 
     LOGV("msm72xx_set_acoustic_table %d %d", device, volume);
+
+    if ( (mCurrentVolume == volume) && 
+         ((mCurrentSndDevice == device) || (device == SND_DEVICE_CURRENT)) ) {
+        LOGV("Update not required");
+        return 0;
+    }
 
     if ( volume > 5 ) {
         return -EIO;
@@ -1449,7 +1458,6 @@ int msm72xx_set_acoustic_table(int device, int volume)
     }
 
     if ( table ) {
-        mCurrentSndDevice = out_path;
         if (ioctl(acousticfd, ACOUSTIC_UPDATE_VOLUME_TABLE, &(table->array) ) < 0) {
             LOGE("ACOUSTIC_UPDATE_VOLUME_TABLE error.");
             return -EIO;
@@ -1470,7 +1478,10 @@ int msm72xx_set_acoustic_table(int device, int volume)
             LOGE("ACOUSTIC_ARM11_DONE error.");
             return -EIO;
         }
+        mCurrentSndDevice = out_path;
     }
+
+    mCurrentVolume = volume;
 
     return 0;
 }
