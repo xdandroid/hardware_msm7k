@@ -131,8 +131,6 @@ static struct tx_iir tx_iir_cfg[18];    // Normal + Full DUplex
 static struct ns ns_cfg[9];
 static struct tx_agc tx_agc_cfg[9];
 
-static int mSampleRate = AUDIO_HW_IN_SAMPLERATE;
-
 static int SND_DEVICE_CURRENT;
 static int SND_DEVICE_HANDSET;
 static int SND_DEVICE_SPEAKER;
@@ -1059,23 +1057,6 @@ static int get_audpp_filter(void)
     return 0;
 }
 
-static unsigned calculate_audpre_table_index(unsigned index)
-{
-    switch (index) {
-        case 48000:    return SAMP_RATE_INDX_48000;
-        case 44100:    return SAMP_RATE_INDX_44100;
-        case 32000:    return SAMP_RATE_INDX_32000;
-        case 24000:    return SAMP_RATE_INDX_24000;
-        case 22050:    return SAMP_RATE_INDX_22050;
-        case 16000:    return SAMP_RATE_INDX_16000;
-        case 12000:    return SAMP_RATE_INDX_12000;
-        case 11025:    return SAMP_RATE_INDX_11025;
-        case 8000:    return SAMP_RATE_INDX_8000;
-        default:     return -1;
-    }
-}
-
-
 /***********************************************************************************
  *
  *  Interfaces
@@ -1264,7 +1245,6 @@ int msm72xx_set_audpre_params(int audpre_index, int tx_iir_index)
 {
     if (audpre_filter_inited)
     {
-        audpre_index = calculate_audpre_table_index(mSampleRate);
         int fd;
 
         fd = open(PREPROC_CTL_DEVICE, O_RDWR);
@@ -1274,10 +1254,6 @@ int msm72xx_set_audpre_params(int audpre_index, int tx_iir_index)
         }
 
          /* Setting AGC Params */
-/*
-        LOGI("AGC Filter Param1= %02x.", tx_agc_cfg[audpre_index].cmd_id);
-        LOGI("AGC Filter Param2= %02x.", tx_agc_cfg[audpre_index].tx_agc_param_mask);
-*/
         LOGI("AGC Filter Param3= %02x.", tx_agc_cfg[audpre_index].tx_agc_enable_flag);
         LOGI("AGC Filter Param4= %02x.", tx_agc_cfg[audpre_index].static_gain);
         LOGI("AGC Filter Param5= %02x.", tx_agc_cfg[audpre_index].adaptive_gain_flag);
@@ -1289,10 +1265,6 @@ int msm72xx_set_audpre_params(int audpre_index, int tx_iir_index)
         }
 
          /* Setting NS Params */
-/*
-        LOGI("NS Filter Param1= %02x.", ns_cfg[audpre_index].cmd_id);
-        LOGI("NS Filter Param2= %02x.", ns_cfg[audpre_index].ec_mode_new);
-*/
         LOGI("NS Filter Param3= %02x.", ns_cfg[audpre_index].dens_gamma_n);
         LOGI("NS Filter Param4= %02x.", ns_cfg[audpre_index].dens_nfe_block_size);
         LOGI("NS Filter Param5= %02x.", ns_cfg[audpre_index].dens_limit_ns);
@@ -1305,9 +1277,6 @@ int msm72xx_set_audpre_params(int audpre_index, int tx_iir_index)
         }
 
         /* Setting TX_IIR Params */
-/*
-        LOGI("TX_IIR Filter Param1= %02x.", tx_iir_cfg[audpre_index].cmd_id);
-*/
         LOGI("TX_IIR Filter Param2= %02x.", tx_iir_cfg[audpre_index].active_flag);
         LOGI("TX_IIR Filter Param3= %02x.", tx_iir_cfg[audpre_index].num_bands);
         LOGI("TX_IIR Filter Param4= %02x.", tx_iir_cfg[audpre_index].iir_params[0]);
