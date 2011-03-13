@@ -1304,8 +1304,8 @@ int msm72xx_enable_audpre(int acoustic_flags, int audpre_index, int tx_iir_index
          return -EPERM;
     }
 
-#if 1
-    acoustic_flags = 0;
+#if 1   // NS_ENABLE -> OK, IIR_ENABLE -> OK (need to check the dmesg for audpre errors). AGC make audrec stop.
+    acoustic_flags &= 0x6;
 #endif
      /*Setting AUDPRE_ENABLE*/
     LOGE("msm72xx_enable_audpre: 0x%04x", acoustic_flags);
