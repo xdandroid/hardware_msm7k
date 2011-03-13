@@ -1334,6 +1334,10 @@ int msm72xx_enable_audpre(int acoustic_flags, int audpre_index, int tx_iir_index
          LOGE("Cannot open PreProc Ctl device");
          return -EPERM;
     }
+
+#if 1
+    acoustic_flags = 0;
+#endif
      /*Setting AUDPRE_ENABLE*/
     LOGE("msm72xx_enable_audpre: 0x%04x", acoustic_flags);
     if (ioctl(fd, AUDIO_ENABLE_AUDPRE, &acoustic_flags) < 0)
@@ -1345,11 +1349,27 @@ int msm72xx_enable_audpre(int acoustic_flags, int audpre_index, int tx_iir_index
     return 0;
 }
 
+int msm72xx_update_audio_method(int method)
+{
+    LOGV("msm72xx_update_audio_method %d", method);
+
+    struct audio_update_req req = {.type = ADIE_UPDATE_AUDIO_METHOD, .value = method};
+    if ( ioctl(acousticfd, ACOUSTIC_UPDATE_AUDIO_SETTINGS, &req) < 0) {
+        LOGE("ACOUSTIC_UPDATE_AUDIO_SETTINGS error.");
+        return -EIO;
+    }  
+    return 0;
+}
+
+#define SND_METHOD_AUDIO 1
+#define SND_METHOD_NONE  -1
+
 int msm72xx_set_acoustic_table(int device, int volume)
 {
     struct fg_table_s* table = NULL;
     struct c_table_s*  ce_table = NULL;
     int out_path = device;
+    int out_path_method = SND_METHOD_VOICE;
 
     LOGV("msm72xx_set_acoustic_table %d %d", device, volume);
 
@@ -1426,22 +1446,27 @@ int msm72xx_set_acoustic_table(int device, int volume)
 
         case TTY_FULL:
             table = &Phone_Acoustic_Table[20];
+            out_path_method = SND_METHOD_NONE;
         break;
 
         case TTY_VCO:
             table = &Phone_Acoustic_Table[21];
+            out_path_method = SND_METHOD_NONE;
         break;
 
         case TTY_HCO:
             table = &Phone_Acoustic_Table[22];
+            out_path_method = SND_METHOD_NONE;
         break;
 
         case REC_INC_MIC:
             table = &Phone_Acoustic_Table[23];
+            out_path_method = SND_METHOD_AUDIO;
         break;
 
         case REC_EXT_MIC:
             table = &Phone_Acoustic_Table[24];
+            out_path_method = SND_METHOD_AUDIO;
         break;
 
         case PLAYBACK_HEADSET:
@@ -1450,6 +1475,7 @@ int msm72xx_set_acoustic_table(int device, int volume)
 
         case PLAYBACK_HANDSFREE:
             table = &Phone_Acoustic_Table[26];
+            out_path_method = SND_METHOD_AUDIO;
         break;
 
         default:
@@ -1474,15 +1500,28 @@ int msm72xx_set_acoustic_table(int device, int volume)
             }
         }
 
-        if (ioctl(acousticfd, ACOUSTIC_ARM11_DONE, NULL ) < 0) {
-            LOGE("ACOUSTIC_ARM11_DONE error.");
-            return -EIO;
+#if 0
+        if ( (out_path_method == SND_METHOD_VOICE) ||
+                (out_path_method == SND_METHOD_AUDIO) ) {
+            msm72xx_update_audio_method(out_path_method);
         }
+#endif
+
         mCurrentSndDevice = out_path;
     }
 
     mCurrentVolume = volume;
 
+    return out_path_method;
+}
+
+int msm72xx_set_acoustic_done(void)
+{
+    LOGV("msm72xx_set_acoustic_done");
+    if (ioctl(acousticfd, ACOUSTIC_ARM11_DONE, NULL ) < 0) {
+        LOGE("ACOUSTIC_ARM11_DONE error.");
+        return -EIO;
+    }
     return 0;
 }
 

@@ -386,8 +386,10 @@ int snd_get_num_endpoints(void);
 int snd_get_endpoint(int, struct msm_snd_endpoint *);
 
 int msm72xx_set_acoustic_table(int device, int volume);
+int msm72xx_set_acoustic_done(void);
 int msm72xx_set_audio_path(bool bEnableMic, bool bEnableDualMic,
                            int device_out, bool bEnableOut);
+int msm72xx_update_audio_method(int method);
 
 #if __cplusplus
 } // extern "C"
