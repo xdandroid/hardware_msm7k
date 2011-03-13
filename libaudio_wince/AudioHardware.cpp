@@ -955,34 +955,34 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
     if (mStartCount) {
         if (--mStartCount == 0) {
             bool bMusic;
-            uint32_t outputDevices = mHardware->mOutput->devices();
+//            uint32_t outputDevices = mHardware->mOutput->devices();
             AudioSystem::isStreamActive(AudioSystem::MUSIC, &bMusic);
             LOGV("AudioStreamOutMSM72xx::write with stream_type = %s", bMusic ? "MUSIC":"NOT MUSIC");
-            //if ( bMusic ) {  
-                bCurrentOutStream = AudioSystem::MUSIC;
-                int device = SND_DEVICE_CURRENT;
-                if ( mHardware->mCurSndDevice == SND_DEVICE_SPEAKER ) {
-                    mHardware->doAudioRouteOrMute(SND_DEVICE_SPEAKER);
-                    device = SND_DEVICE_PLAYBACK_HANDSFREE;
-                } else if ( mHardware->mCurSndDevice == SND_DEVICE_HEADSET ) {
-                    mHardware->doAudioRouteOrMute(SND_DEVICE_HEADSET);
-                    device = SND_DEVICE_PLAYBACK_HEADSET;
-                }
-
-                if ( msm72xx_set_audio_path != NULL ) {
-                    msm72xx_set_audio_path(0, 0, device, true );
-                }
-                if ( msm72xx_set_acoustic_table != NULL ) {
-                    msm72xx_set_acoustic_table(device, 5);
-                }
-                if ( msm72xx_set_acoustic_done != NULL ) {
-                    msm72xx_set_acoustic_done();
-                }
-/*
+            if ( bMusic ) {  
+                bCurrentOutStream = AudioSystem::MUSIC;    
             } else {
                 bCurrentOutStream = AudioSystem::DEFAULT;
             }
-*/
+
+            int device = SND_DEVICE_CURRENT;
+            if ( mHardware->mCurSndDevice == SND_DEVICE_SPEAKER ) {
+                mHardware->doAudioRouteOrMute(SND_DEVICE_SPEAKER);
+                device = SND_DEVICE_PLAYBACK_HANDSFREE;
+            } else if ( mHardware->mCurSndDevice == SND_DEVICE_HEADSET ) {
+                mHardware->doAudioRouteOrMute(SND_DEVICE_HEADSET);
+                device = SND_DEVICE_PLAYBACK_HEADSET;
+            }
+
+            if ( msm72xx_set_audio_path != NULL ) {
+                msm72xx_set_audio_path(0, 0, device, true );
+            }
+            if ( msm72xx_set_acoustic_table != NULL ) {
+                msm72xx_set_acoustic_table(device, 5);
+            }
+            if ( msm72xx_set_acoustic_done != NULL ) {
+                msm72xx_set_acoustic_done();
+            }
+
             ioctl(mFd, AUDIO_START, 0);
         }
     }
