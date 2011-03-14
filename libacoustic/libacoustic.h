@@ -128,10 +128,6 @@ struct rx_iir_filter {
 };
 
 struct tx_iir {
-/*
-    uint16_t  cmd_id;
-    uint16_t  active_flag;
-*/
     uint16_t num_bands;
     uint16_t iir_params[48];
     uint16_t active_flag;
@@ -142,10 +138,6 @@ struct adrc_filter {
 };
 
 struct ns {
-/*
-        uint16_t  cmd_id;
-        uint16_t  ec_mode_new;
-*/
         uint16_t  dens_gamma_n;
         uint16_t  dens_nfe_block_size;
         uint16_t  dens_limit_ns;
@@ -155,11 +147,6 @@ struct ns {
 };
 
 struct tx_agc {
-/*
-        uint16_t  cmd_id;
-        uint16_t  tx_agc_param_mask;
-*/
-        uint16_t  tx_agc_enable_flag;
         uint16_t  static_gain;
         int16_t   adaptive_gain_flag;
         uint16_t  agc_params[17];

@@ -687,8 +687,7 @@ static int check_and_set_audpre_parameters(char *buf, int size)
         /* Table description */
         if (!(p = strtok(NULL, seps)))
             goto token_err;
-
-        tx_agc_cfg[samp_index].tx_agc_enable_flag = (uint16_t)strtol(p, &ps, 16);
+        /* Enable */
         if (!(p = strtok(NULL, seps)))
             goto token_err;
 
@@ -700,7 +699,7 @@ static int check_and_set_audpre_parameters(char *buf, int size)
         if (!(p = strtok(NULL, seps)))
             goto token_err;
 
-        for (i = 0; i < 17; i++) {
+        for (i = 0; i < 18; i++) {
             tx_agc_cfg[samp_index].agc_params[i] = (uint16_t)strtol(p, &ps, 16);
             if (!(p = strtok(NULL, seps)))
                 goto token_err;
@@ -724,6 +723,9 @@ static int check_and_set_audpre_parameters(char *buf, int size)
         /* Table description */
         if (!(p = strtok(NULL, seps)))
             goto token_err;
+        /* Enable */
+        if (!(p = strtok(NULL, seps)))
+            goto token_err;
         ns_cfg[samp_index].dens_gamma_n = (uint16_t)strtol(p, &ps, 16);
 
         if (!(p = strtok(NULL, seps)))
@@ -745,9 +747,6 @@ static int check_and_set_audpre_parameters(char *buf, int size)
         if (!(p = strtok(NULL, seps)))
             goto token_err;
         ns_cfg[samp_index].wb_gamma_n = (uint16_t)strtol(p, &ps, 16);
-
-        if (!(p = strtok(NULL, seps)))
-            goto token_err;
     }
     return 0;
 
@@ -1254,7 +1253,6 @@ int msm72xx_set_audpre_params(int audpre_index, int tx_iir_index)
         }
 
          /* Setting AGC Params */
-        LOGI("AGC Filter Param3= %02x.", tx_agc_cfg[audpre_index].tx_agc_enable_flag);
         LOGI("AGC Filter Param4= %02x.", tx_agc_cfg[audpre_index].static_gain);
         LOGI("AGC Filter Param5= %02x.", tx_agc_cfg[audpre_index].adaptive_gain_flag);
         LOGI("AGC Filter Param6= %02x.", tx_agc_cfg[audpre_index].agc_params[0]);
@@ -1304,10 +1302,7 @@ int msm72xx_enable_audpre(int acoustic_flags, int audpre_index, int tx_iir_index
          return -EPERM;
     }
 
-#if 1   // NS_ENABLE -> OK, IIR_ENABLE -> OK (need to check the dmesg for audpre errors). AGC make audrec stop.
-    acoustic_flags &= 0x6;
-#endif
-     /*Setting AUDPRE_ENABLE*/
+    /*Setting AUDPRE_ENABLE*/
     LOGE("msm72xx_enable_audpre: 0x%04x", acoustic_flags);
     if (ioctl(fd, AUDIO_ENABLE_AUDPRE, &acoustic_flags) < 0)
     {
