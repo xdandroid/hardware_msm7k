@@ -954,8 +954,10 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
     // start audio after we fill 2 buffers
     if (mStartCount) {
         if (--mStartCount == 0) {
+
+            ioctl(mFd, AUDIO_START, 0);
+
             bool bMusic;
-//            uint32_t outputDevices = mHardware->mOutput->devices();
             AudioSystem::isStreamActive(AudioSystem::MUSIC, &bMusic);
             LOGV("AudioStreamOutMSM72xx::write with stream_type = %s", bMusic ? "MUSIC":"NOT MUSIC");
             if ( bMusic ) {  
@@ -982,8 +984,6 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
             if ( msm72xx_set_acoustic_done != NULL ) {
                 msm72xx_set_acoustic_done();
             }
-
-            ioctl(mFd, AUDIO_START, 0);
         }
     }
     return bytes;
