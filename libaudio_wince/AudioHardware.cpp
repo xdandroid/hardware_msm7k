@@ -110,13 +110,11 @@ AudioHardware::AudioHardware() :
     htc_acoustic_init = (int (*)(void))::dlsym(acoustic, "htc_acoustic_init");
     if ((*htc_acoustic_init) == 0 ) {
         LOGE("Could not open htc_acoustic_init()");
-        return;
     }
 
     htc_acoustic_deinit = (int (*)(void))::dlsym(acoustic, "htc_acoustic_deinit");
     if ((*htc_acoustic_deinit) == 0 ) {
         LOGE("Could not open htc_acoustic_deinit()");
-        return;
     }
 
     msm72xx_set_acoustic_table = (int (*)(int, int))::dlsym(acoustic, "msm72xx_set_acoustic_table");
@@ -141,13 +139,11 @@ AudioHardware::AudioHardware() :
 
     if ( htc_acoustic_init() != 0 ) {
         LOGE("Failed to initialize htc acoutic system");
-//        return;
     }    
 
     snd_get_num = (int (*)(void))::dlsym(acoustic, "snd_get_num_endpoints");
     if ((*snd_get_num) == 0 ) {
         LOGE("Could not open snd_get_num()");
-//        return;
     }
 
     mNumSndEndpoints = snd_get_num();
@@ -159,7 +155,7 @@ AudioHardware::AudioHardware() :
     snd_get_endpoint = (int (*)(int, msm_snd_endpoint *))::dlsym(acoustic, "snd_get_endpoint");
     if ((*snd_get_endpoint) == 0 ) {
         LOGE("Could not open snd_get_endpoint()");
-        return;
+        //return;
     }
 
     for (int cnt = 0; cnt < mNumSndEndpoints; cnt++, ept++) {
@@ -459,22 +455,30 @@ static status_t set_volume_rpc(uint32_t device,
      args.method = method;
      args.volume = volume;
 
-     if ( msm72xx_set_acoustic_table != NULL ) {
-         device_method = msm72xx_set_acoustic_table(device, volume);
-     }
+     if ( device != SND_DEVICE_IDLE ) {
+         if ( msm72xx_set_acoustic_table != NULL ) {
+             device_method = msm72xx_set_acoustic_table(device, volume);
+         }
 
-     /* Some devices do not require/support volume setting */
-     if ( device_method != SND_METHOD_NONE ) {
-         /* Some devices only accept volume level 5 */
-         if ( device_method == SND_METHOD_AUDIO ) {
-            LOGV("call snd_set_volume audio 5");
-            args.device = SND_DEVICE_IDLE;
-            args.method = SND_METHOD_AUDIO;
-            args.volume = 5;
-         } else {
-            LOGV("call snd_set_volume voice %d", volume);
-        }
+         /* Some devices do not require/support volume setting */
+         if ( device_method != SND_METHOD_NONE ) {
+             /* Some devices only accept volume level 5 */
+             if ( device_method == SND_METHOD_AUDIO ) {
+                LOGV("call snd_set_volume audio 5");
+                args.device = SND_DEVICE_IDLE;
+                args.method = SND_METHOD_AUDIO;
+                args.volume = 5;
+             } else {
+                LOGV("call snd_set_volume voice %d", volume);
+            }
 
+             if (ioctl(fd, SND_SET_VOLUME, &args) < 0) {
+                 LOGE("snd_set_volume error.");
+                 close(fd);
+                 return -EIO;
+             }
+         }
+     } else {
          if (ioctl(fd, SND_SET_VOLUME, &args) < 0) {
              LOGE("snd_set_volume error.");
              close(fd);
@@ -482,12 +486,6 @@ static status_t set_volume_rpc(uint32_t device,
          }
      }
 
-     // Is it required here ?
-#if 0
-     if ( msm72xx_set_acoustic_done != NULL ) {
-        msm72xx_set_acoustic_done();
-     }
-#endif
      close(fd);
      return NO_ERROR;
 }
@@ -528,6 +526,14 @@ status_t AudioHardware::setMasterVolume(float v)
     return -1;
 }
 
+static int get_master_volume(void) 
+{
+    float volume;
+    AudioSystem::getMasterVolume(&volume);
+    volume = ceil(volume * 5.0);
+    return volume;
+}
+
 static status_t do_route_audio_rpc(uint32_t device,
                                    bool ear_mute, bool mic_mute)
 {
@@ -562,12 +568,9 @@ static status_t do_route_audio_rpc(uint32_t device,
 
     // TODO : Encapsulate snd_set device in SetADIEPath
 
-    // TODO : switch on/off leds as done in msm_setup_audio() ?
-    float volume;
-    AudioSystem::getMasterVolume(&volume);
-    volume = ceil(volume * 5.0);    
+    // TODO : switch on/off leds as done in msm_setup_audio() ? 
     if ( msm72xx_set_acoustic_table != NULL ) {
-        msm72xx_set_acoustic_table(device, volume);
+        msm72xx_set_acoustic_table(device, get_master_volume());
     }
  
     if (ioctl(fd, SND_SET_DEVICE, &args) < 0) {
@@ -750,11 +753,8 @@ status_t AudioHardware::doRouting()
         mCurSndDevice = sndDevice;
 
         /* Update volume in case of device change */
-        float volume;
-        int method;
-        AudioSystem::getMasterVolume(&volume);
-        volume = ceil(volume * 5.0); 
-        
+        int volume = get_master_volume()
+        int method;       
         /* When in call, use the METHOD_VOICE to set the volume */
         if ( mMode == AudioSystem::MODE_IN_CALL ) {
             set_volume_rpc(mCurSndDevice, SND_METHOD_VOICE, volume);
@@ -957,6 +957,7 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
 
             ioctl(mFd, AUDIO_START, 0);
 
+            /* Set the correct audio path and acoustic settings depending on the audio source */
             bool bMusic;
             AudioSystem::isStreamActive(AudioSystem::MUSIC, &bMusic);
             LOGV("AudioStreamOutMSM72xx::write with stream_type = %s", bMusic ? "MUSIC":"NOT MUSIC");
@@ -1202,16 +1203,20 @@ status_t AudioHardware::AudioStreamInMSM72xx::set(
      */
     int (*msm72xx_set_audpre_params)(int, int);
     msm72xx_set_audpre_params = (int (*)(int, int))::dlsym(acoustic, "msm72xx_set_audpre_params");
-    status = msm72xx_set_audpre_params(audpre_index, tx_iir_index);
-    if (status < 0)
-        LOGE("Cannot set audpre parameters");
+    if ( msm72xx_set_audpre_params != NULL ) {
+        status = msm72xx_set_audpre_params(audpre_index, tx_iir_index);
+        if (status < 0)
+            LOGE("Cannot set audpre parameters");
+    }
 
     int (*msm72xx_enable_audpre)(int, int, int);
     msm72xx_enable_audpre = (int (*)(int, int, int))::dlsym(acoustic, "msm72xx_enable_audpre");
     mAcoustics = acoustic_flags;
-    status = msm72xx_enable_audpre((int)acoustic_flags, audpre_index, tx_iir_index);
-    if (status < 0)
-        LOGE("Cannot enable audpre");
+    if ( msm72xx_enable_audpre != NULL ) {
+        status = msm72xx_enable_audpre((int)acoustic_flags, audpre_index, tx_iir_index);
+        if (status < 0)
+            LOGE("Cannot enable audpre");
+    }
 
     return NO_ERROR;
 
