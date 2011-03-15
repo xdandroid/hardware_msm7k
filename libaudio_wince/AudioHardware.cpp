@@ -57,12 +57,14 @@ static status_t set_volume_rpc(uint32_t device,
                                uint32_t method,
                                uint32_t volume);
 
-static uint32_t SND_DEVICE_CURRENT=-1;
-static uint32_t SND_DEVICE_HANDSET=-1;
-static uint32_t SND_DEVICE_SPEAKER=-1;
+/* Default device for backward compatibility if libhtc_acoustic is not found */
+static uint32_t SND_DEVICE_CURRENT=256;
+static uint32_t SND_DEVICE_HANDSET=0;
+static uint32_t SND_DEVICE_SPEAKER=1;
+static uint32_t SND_DEVICE_HEADSET=2;
+
 static uint32_t SND_DEVICE_BT=-1;
 static uint32_t SND_DEVICE_BT_EC_OFF=-1;
-static uint32_t SND_DEVICE_HEADSET=-1;
 static uint32_t SND_DEVICE_HEADSET_AND_SPEAKER=-1;
 static uint32_t SND_DEVICE_IN_S_SADC_OUT_HANDSET=-1;
 static uint32_t SND_DEVICE_IN_S_SADC_OUT_SPEAKER_PHONE=-1;
@@ -90,8 +92,8 @@ AudioHardware::AudioHardware() :
     mInit(false), mMicMute(true), mBluetoothNrec(true), mBluetoothId(0),
     mOutput(0), mSndEndpoints(NULL), mCurSndDevice(-1)
 {
-    int (*snd_get_num)();
-    int (*snd_get_endpoint)(int, msm_snd_endpoint *);
+    int (*snd_get_num)() = NULL;
+    int (*snd_get_endpoint)(int, msm_snd_endpoint *) = NULL;
 /*
     int (*set_acoustic_parameters)();
 */
@@ -109,80 +111,91 @@ AudioHardware::AudioHardware() :
 
     htc_acoustic_init = (int (*)(void))::dlsym(acoustic, "htc_acoustic_init");
     if ((*htc_acoustic_init) == 0 ) {
-        LOGE("Could not open htc_acoustic_init()");
+        LOGE("Could not link htc_acoustic_init()");
     }
 
-    htc_acoustic_deinit = (int (*)(void))::dlsym(acoustic, "htc_acoustic_deinit");
-    if ((*htc_acoustic_deinit) == 0 ) {
-        LOGE("Could not open htc_acoustic_deinit()");
+    /* If acoustic init was ok, then continue linking other functions
+     * otherwise, don't link them so that the rest of the hardware
+     * can still work
+     */
+    if ( (htc_acoustic_init) && (htc_acoustic_init() != 0) ) {
+        LOGE("Failed to initialize htc acoutic system. Using basic hardware.");
+    } else {
+        htc_acoustic_deinit = (int (*)(void))::dlsym(acoustic, "htc_acoustic_deinit");
+        if ((*htc_acoustic_deinit) == 0 ) {
+            LOGE("Could not link htc_acoustic_deinit()");
+        }
+
+        msm72xx_set_acoustic_table = (int (*)(int, int))::dlsym(acoustic, "msm72xx_set_acoustic_table");
+        if ((*msm72xx_set_acoustic_table) == 0 ) {
+            LOGE("Could not link msm72xx_set_acoustic_table()");
+        }
+
+        msm72xx_set_acoustic_done = (int (*)(void))::dlsym(acoustic, "msm72xx_set_acoustic_done");
+        if ((*msm72xx_set_acoustic_done) == 0 ) {
+            LOGE("Could not link msm72xx_set_acoustic_done()");
+        }
+
+        msm72xx_set_audio_path = (int (*)(bool, bool, int, bool))::dlsym(acoustic, "msm72xx_set_audio_path");
+        if ((*msm72xx_set_audio_path) == 0 ) {
+            LOGE("Could not link msm72xx_set_audio_path()");
+        }
+
+        msm72xx_update_audio_method = (int (*)(int))::dlsym(acoustic, "msm72xx_update_audio_method");
+        if ((*msm72xx_update_audio_method) == 0 ) {
+            LOGE("Could not link msm72xx_update_audio_method()");
+        }
+
+        snd_get_num = (int (*)(void))::dlsym(acoustic, "snd_get_num_endpoints");
+        if ((*snd_get_num) == 0 ) {
+            LOGE("Could not link snd_get_num()");
+        }
+
+        snd_get_endpoint = (int (*)(int, msm_snd_endpoint *))::dlsym(acoustic, "snd_get_endpoint");
+        if ((*snd_get_endpoint) == 0 ) {
+            LOGE("Could not link snd_get_endpoint()");
+        }
     }
 
-    msm72xx_set_acoustic_table = (int (*)(int, int))::dlsym(acoustic, "msm72xx_set_acoustic_table");
-    if ((*msm72xx_set_acoustic_table) == 0 ) {
-        LOGE("Could not link msm72xx_set_acoustic_table()");
-    }
-
-    msm72xx_set_acoustic_done = (int (*)(void))::dlsym(acoustic, "msm72xx_set_acoustic_done");
-    if ((*msm72xx_set_acoustic_done) == 0 ) {
-        LOGE("Could not link msm72xx_set_acoustic_done()");
-    }
-
-    msm72xx_set_audio_path = (int (*)(bool, bool, int, bool))::dlsym(acoustic, "msm72xx_set_audio_path");
-    if ((*msm72xx_set_audio_path) == 0 ) {
-        LOGE("Could not link msm72xx_set_audio_path()");
-    }
-
-    msm72xx_update_audio_method = (int (*)(int))::dlsym(acoustic, "msm72xx_update_audio_method");
-    if ((*msm72xx_update_audio_method) == 0 ) {
-        LOGE("Could not link msm72xx_update_audio_method()");
-    }
-
-    if ( htc_acoustic_init() != 0 ) {
-        LOGE("Failed to initialize htc acoutic system");
-    }    
-
-    snd_get_num = (int (*)(void))::dlsym(acoustic, "snd_get_num_endpoints");
-    if ((*snd_get_num) == 0 ) {
-        LOGE("Could not open snd_get_num()");
-    }
-
-    mNumSndEndpoints = snd_get_num();
-    LOGD("mNumSndEndpoints = %d", mNumSndEndpoints);
-    mSndEndpoints = new msm_snd_endpoint[mNumSndEndpoints];
-    mInit = true;
-    LOGV("constructed %d SND endpoints", mNumSndEndpoints);
-    ept = mSndEndpoints;
-    snd_get_endpoint = (int (*)(int, msm_snd_endpoint *))::dlsym(acoustic, "snd_get_endpoint");
-    if ((*snd_get_endpoint) == 0 ) {
-        LOGE("Could not open snd_get_endpoint()");
-        //return;
-    }
-
-    for (int cnt = 0; cnt < mNumSndEndpoints; cnt++, ept++) {
-        ept->id = cnt;
-        snd_get_endpoint(cnt, ept);
-        LOGV("cnt = %d ept->name = %s ept->id = %d\n", cnt, ept->name, ept->id);
+    if ( snd_get_num != NULL ) {
+        mNumSndEndpoints = snd_get_num();
+        LOGD("mNumSndEndpoints = %d", mNumSndEndpoints);
+        mSndEndpoints = new msm_snd_endpoint[mNumSndEndpoints];
+        mInit = true;
+        LOGV("constructed %d SND endpoints", mNumSndEndpoints);
+        ept = mSndEndpoints;
+        if ( snd_get_endpoint != NULL ) {
+            for (int cnt = 0; cnt < mNumSndEndpoints; cnt++, ept++) {
+                ept->id = cnt;
+                snd_get_endpoint(cnt, ept);
+                LOGV("cnt = %d ept->name = %s ept->id = %d\n", cnt, ept->name, ept->id);
 #define CHECK_FOR(desc) \
-        if (!strcmp(ept->name, #desc)) { \
-            SND_DEVICE_##desc = ept->id; \
-            LOGD("BT MATCH " #desc); \
-        } else
-        CHECK_FOR(CURRENT)
-        CHECK_FOR(HANDSET)
-        CHECK_FOR(SPEAKER)
-        CHECK_FOR(BT)
-        CHECK_FOR(BT_EC_OFF)
-        CHECK_FOR(HEADSET)
-        CHECK_FOR(CARKIT)
-        CHECK_FOR(TTY_FULL)
-        CHECK_FOR(TTY_VCO)
-        CHECK_FOR(TTY_HCO)
-        CHECK_FOR(NO_MIC_HEADSET)
-        CHECK_FOR(FM_HEADSET)
-        CHECK_FOR(FM_SPEAKER)
-        CHECK_FOR(HEADSET_AND_SPEAKER)
-        CHECK_FOR(IDLE) {}
+                if (!strcmp(ept->name, #desc)) { \
+                    SND_DEVICE_##desc = ept->id; \
+                    LOGD("BT MATCH " #desc); \
+                } else
+                CHECK_FOR(CURRENT)
+                CHECK_FOR(HANDSET)
+                CHECK_FOR(SPEAKER)
+                CHECK_FOR(BT)
+                CHECK_FOR(BT_EC_OFF)
+                CHECK_FOR(HEADSET)
+                CHECK_FOR(CARKIT)
+                CHECK_FOR(TTY_FULL)
+                CHECK_FOR(TTY_VCO)
+                CHECK_FOR(TTY_HCO)
+                CHECK_FOR(NO_MIC_HEADSET)
+                CHECK_FOR(FM_HEADSET)
+                CHECK_FOR(FM_SPEAKER)
+                CHECK_FOR(HEADSET_AND_SPEAKER)
+                CHECK_FOR(IDLE) {}
 #undef CHECK_FOR
+            }
+        }
+    } else {
+        mNumSndEndpoints = 4;
+        LOGV("constructed %d default SND endpoints", mNumSndEndpoints);
+        mInit = true;
     }
 
     /* Reset remote audio */
@@ -203,8 +216,7 @@ AudioHardware::~AudioHardware()
     closeOutputStream((AudioStreamOut*)mOutput);
     delete [] mSndEndpoints;
 
-    if ( htc_acoustic_init() == 0 )
-    {
+    if ( htc_acoustic_deinit != NULL ) {
         htc_acoustic_deinit();
     }
 
@@ -753,7 +765,7 @@ status_t AudioHardware::doRouting()
         mCurSndDevice = sndDevice;
 
         /* Update volume in case of device change */
-        int volume = get_master_volume()
+        int volume = get_master_volume();
         int method;       
         /* When in call, use the METHOD_VOICE to set the volume */
         if ( mMode == AudioSystem::MODE_IN_CALL ) {
