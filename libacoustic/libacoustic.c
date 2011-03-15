@@ -606,13 +606,13 @@ static int ReadAudioParaFromFile(void)
     munmap(read_buf, st.st_size);
     close(csvfd);
 
-    LOGV("Readed :");
-    LOGV("%d Audio_Path_Table entries", APT_max_index);
-    LOGV("%d Audio_Path_Uplink_Table entries", APUT_max_index);
-    LOGV("%d Phone_Acoustic_Table entries", PAT_max_index);
-    LOGV("%d BT_Phone_Acoustic_Table entries", BTPAT_max_index);
-    LOGV("%d HTC_VOC_CAL_CODEC_TABLE_Table entries", HVCCT_max_index);
-    LOGV("%d CE_Acoustic_Table entries", CEAT_max_index);
+    LOGI("Readed :");
+    LOGI("%d Audio_Path_Table entries", APT_max_index);
+    LOGI("%d Audio_Path_Uplink_Table entries", APUT_max_index);
+    LOGI("%d Phone_Acoustic_Table entries", PAT_max_index);
+    LOGI("%d BT_Phone_Acoustic_Table entries", BTPAT_max_index);
+    LOGI("%d HTC_VOC_CAL_CODEC_TABLE_Table entries", HVCCT_max_index);
+    LOGI("%d CE_Acoustic_Table entries", CEAT_max_index);
 
     // initialise audio table with uplink off
     UpdateAudioAdieTable(0, 0, 0, 0, true);
