@@ -21,14 +21,15 @@
 #include <utils/threads.h>
 #include <stdint.h>
 
-//#define MSM_HTC_ACOUSTIC_WINCE "/dev/htc-acoustic_wince"
-#define MSM_HTC_ACOUSTIC_WINCE "/dev/htc-acoustic"
+#define MSM_HTC_ACOUSTIC_WINCE "/dev/htc-acoustic_wince"
+#define MSM_TPA2016D2_DEV      "/dev/tpa2016d2"
 
 #define MAX_MODE_NAME_LENGTH 32
 
 struct msm_acoustic_capabilities {
     char htc_voc_cal_fields_per_param;    /* Specifies the number of fields per parameter */
     bool bDualMicSupported;
+    bool bUseTPA2016;
     /* TODO : keep up-to-date with new fields in kernel */
 };
 
@@ -63,7 +64,7 @@ struct audio_update_req {
     int value;      /* For PCOM_UPDATE, dex data. For ADIE updates, value of the setting */
 };
 
-/* IOCTLs */
+/* Acoustic IOCTLs */
 #define ACOUSTIC_IOCTL_MAGIC 'p'
 #define ACOUSTIC_ARM11_DONE	                    _IOW(ACOUSTIC_IOCTL_MAGIC, 22, unsigned int)
 
@@ -76,6 +77,57 @@ struct audio_update_req {
 #define ACOUSTIC_GET_CAPABILITIES               _IOW(ACOUSTIC_IOCTL_MAGIC,  8, struct msm_acoustic_capabilities* )
 
 #define ACOUSTIC_SET_HW_AUDIO_PATH          _IOW(ACOUSTIC_IOCTL_MAGIC,  10, struct msm_audio_path* )
+
+/* TPA2016 IOCTLs */
+#define TPA2016_IOCTL_MAGIC 'a'
+#define TPA2016_SET_POWER                       _IOW(TPA2016_IOCTL_MAGIC, 0x01,	unsigned)
+#define TPA2016_SET_CONFIG                      _IOW(TPA2016_IOCTL_MAGIC, 0x02,	unsigned char*)
+#define TPA2016_READ_CONFIG                     _IOW(TPA2016_IOCTL_MAGIC, 0x03, unsigned char*)
+
+/* TPA2016 registers */
+#define IC_REG          0x1
+#define ATK_REG         0x2
+#define REL_REG         0x3
+#define HOLD_REG        0x4
+#define FIXED_GAIN_REG	0x5
+#define AGC_REG1        0x6
+#define AGC_REG2        0x7
+
+
+/* Registers map
+ *
+ *  Address | Name                  | Bit 7      | Bit 6      | Bit 5      | Bit 4      | Bit 3      | Bit 2      | Bit 1      | Bit 0      |
+ *  --------+-----------------------+------------+------------+------------+------------+------------+------------+------------+------------+
+ *  0x1     | IC FUNCTION CONTROL   | SPKR_EN_R  | SPKR_EN_L  | SWS        | FAULT_R    | FAULT_L    | Thermal    | UNUSED     | NG_EN      |
+ *  0x2     | AGC ATTACK CONTROL    | Unused     | Unused     | ATK_time[5]| ATK_time[4]| ATK_time[3]| ATK_time[2]| ATK_time[1]| ATK_time[0]|
+ *  0x3     | AGC RELEASE CONTROL   | Unused     | Unused     | REL_time[5]| REL_time[4]| REL_time[3]| REL_time[2]| REL_time[1]| REL_time[0]|
+ *  0x4     | AGC HOLD TIME CONTROL | Unused     | Unused     | HLD_time[5]| HLD_time[4]| HLD_time[3]| HLD_time[2]| HLD_time[1]| HLD_time[0]|
+ *  0x5     | AGC FIXED GAIN CONTROL| Unused     | Unused     | Fix_gain[5]| Fix_gain[4]| Fix_gain[3]| Fix_gain[2]| Fix_gain[1]| Fix_gain[0]|
+ *  0x6     | AGC CONTROL 1         | Out Lim Dis| NoisGateTh1| NoisGateTh0| Out limlev4| Out limlev3| Out limlev2| Out limlev1| Out limlev0|
+ *  0x7     | AGC CONTROL 2         | Max Gain[3]| Max Gain[2]| Max Gain[1]| Max Gain[0]| Unused     | Unused     | CompRatio1 | CompRatio0 |
+ *
+ */
+
+#define SPK_EN_L                    1<<6
+#define SPK_EN_R                    1<<7
+#define SWS_BIT                     0x40
+#define NOISE_GATE_ENABLE_BIT       0x01
+
+
+#define AGC_ATTACK_BITS             0x3F
+#define AGC_RELEASE_BITS            0x3F
+#define AGC_HOLDTIME_BITS           0x3F
+#define AGC_FIXEDGAIN_BITS          0x3F
+/* AGC CONTROL 1 */
+#define OUT_LIMITER_DISABLE         0x80
+#define NOISE_GATE_THRESOLD_BITS    0x60
+#define OUT_LIMITER_LEVEL_BITS      0x1F
+/* AGC CONTROL 2 */
+#define MAX_GAIN_BITS               0xF0
+#define COMPRESSION_RATIO_BITS      0x03
+
+
+
 
 #define TRUE 1
 #define FALSE 0

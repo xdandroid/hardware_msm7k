@@ -114,6 +114,7 @@ static int acousticfd = 0;
 static int mNumSndEndpoints;
 static struct msm_snd_endpoint *mSndEndpoints;
 static struct msm_acoustic_capabilities device_capabilities;
+static int TPA2016fd;
 
 static bool mInit = false;
 
@@ -130,6 +131,12 @@ static bool adrc_filter_exists[1];
 static struct tx_iir tx_iir_cfg[18];    // Normal + Full DUplex
 static struct ns ns_cfg[9];
 static struct tx_agc tx_agc_cfg[9];
+
+// Current TPA2016 registers value initialized with default values
+static uint8_t tpa2016d2_regs[7] = { 0xC3, 0x05, 0x0B, 0x00, 0x06, 0x3A, 0xC2 };
+/* Values from TIAGC.csv */
+static const uint8_t tpa2016d2_regs_audio[7] = { 0xC2, 0x20, 0x01, 0x00, 0x10, 0x19, 0xC0 };
+static const uint8_t tpa2016d2_regs_voice[7] = { 0xC3, 0x3F, 0x01, 0x00, 0x14, 0x7A, 0xC0 };
 
 static int SND_DEVICE_CURRENT;
 static int SND_DEVICE_HANDSET;
@@ -179,6 +186,7 @@ static int openacousticfd(void)
 
 static int get_device_capabilities(void)
 {
+    int bOn;
     if ( ioctl(acousticfd, ACOUSTIC_GET_CAPABILITIES, &device_capabilities) < 0) {
         LOGE("ACOUSTIC_GET_CAPABILITIES error.");
         return -EIO;
@@ -186,6 +194,38 @@ static int get_device_capabilities(void)
     LOGV("Device capabilities :");
     LOGV("- Htc voc cal fields per params : %d", device_capabilities.htc_voc_cal_fields_per_param);
     LOGV("- Dual mic supported : %s", (device_capabilities.bDualMicSupported)?"true":"false");
+
+    /* Test for TPA2016 */
+    if ( device_capabilities.bUseTPA2016 ) {
+        TPA2016fd = open(MSM_TPA2016D2_DEV, O_RDWR);
+        if ( TPA2016fd < 0 ) {
+            LOGE("Error opening dev %s (fd = %d). Error %s (%d)", MSM_TPA2016D2_DEV, acousticfd,
+                        strerror(errno), errno);
+            LOGE("Device claims to have TPA2016 amplifier but %s not present. Disable TPA2016", MSM_TPA2016D2_DEV);
+            device_capabilities.bUseTPA2016 = false;
+        } else {
+            /* Power on amplifier */
+            bOn = 1;
+            if (ioctl(TPA2016fd, TPA2016_SET_POWER, &bOn ) < 0) {
+                LOGE("TPA2016_SET_POWER error.");
+                return -EIO;
+            }
+
+            /* Read current device configuration */
+            if (ioctl(TPA2016fd, TPA2016_READ_CONFIG, &tpa2016d2_regs ) < 0) {
+                LOGE("TPA2016_READ_CONFIG error.");
+                return -EIO;
+            }  
+
+            /* Power off amplifier */
+            bOn = 0;
+            if (ioctl(TPA2016fd, TPA2016_SET_POWER, &bOn ) < 0) {
+                LOGE("TPA2016_SET_POWER error.");
+                return -EIO;
+            }
+        } 
+    }
+    LOGV("- Use TPA2016 Amplifier : %s", (device_capabilities.bUseTPA2016)?"true":"false");
     return 0;
 }
 
@@ -1094,7 +1134,10 @@ int htc_acoustic_init(void)
     if ( rc == 0 ) {
         audpre_filter_inited = true;
     }
-    /* TODO : AGC for TI A2026 from csv file when A2026 driver present in kernel */
+    /* TODO : AGC for TI A2026 from csv file ? 
+     * Values are almost all the same, except for voice call.
+     * Values hardcoded here, might be readed from file if required in the future
+     */
 
     /* Retrieve available sound endpoints IDs from kernel */
     rc = get_sound_endpoints();
@@ -1123,6 +1166,11 @@ int htc_acoustic_deinit(void)
 
     /* Close the acoustic driver */
     close(acousticfd);
+
+    /* Close TPA2016 */
+    if ( device_capabilities.bUseTPA2016 ) {
+        close(TPA2016fd);
+    }
 
     /* Free the memory */
     if ( Audio_Path_Table != NULL )
@@ -1239,7 +1287,7 @@ int msm72xx_enable_audpp(uint16_t enable_mask, uint32_t device)
     return 0;
 }
 
-// TODO : Check with lbhtc-acoustic.so
+
 int msm72xx_set_audpre_params(int audpre_index, int tx_iir_index)
 {
     if (audpre_filter_inited)
@@ -1435,6 +1483,7 @@ int msm72xx_set_acoustic_table(int device, int volume)
 
         case PLAYBACK_HEADSET:
             table = &Phone_Acoustic_Table[25];
+            out_path_method = SND_METHOD_AUDIO;
         break;
 
         case PLAYBACK_HANDSFREE:
@@ -1464,13 +1513,32 @@ int msm72xx_set_acoustic_table(int device, int volume)
             }
         }
 
+        /* Set TPA2016 specific parameters if existing */
+        if ( (device_capabilities.bUseTPA2016) &&
+                ((out_path == HANDSFREE) || (out_path == PLAYBACK_HANDSFREE)) ) {
+            if ( out_path_method == SND_METHOD_NONE ) {
+                goto exit;
+            } else if ( out_path_method == SND_METHOD_AUDIO ) {
+                /* Set default audio settings */
+                memcpy(tpa2016d2_regs, tpa2016d2_regs_audio, 7);
+            } else if ( out_path_method == SND_METHOD_VOICE ) {
+                /* Set default voice settings */
+                memcpy(tpa2016d2_regs, tpa2016d2_regs_voice, 7);
+            }
+            /* Set volume */
+            tpa2016d2_regs[FIXED_GAIN_REG-1] = volume * 6;
+            if (ioctl(TPA2016fd, TPA2016_SET_CONFIG, &tpa2016d2_regs ) < 0) {
+                LOGE("TPA2016_SET_CONFIG error.");
+                return -EIO;
+            }  
+        }  
 #if 0
         if ( (out_path_method == SND_METHOD_VOICE) ||
                 (out_path_method == SND_METHOD_AUDIO) ) {
             msm72xx_update_audio_method(out_path_method);
         }
 #endif
-
+exit:
         mCurrentSndDevice = out_path;
     }
 
@@ -1520,6 +1588,22 @@ int msm72xx_set_audio_path(bool bEnableMic, bool bEnableDualMic,
         LOGE("ACOUSTIC_SET_HW_AUDIO_PATH error.");
         return -EIO;
     } 
+
+    if ( device_capabilities.bUseTPA2016 ) {
+        if (ioctl(TPA2016fd, TPA2016_SET_POWER, &audio_path.bEnableSpeaker ) < 0) {
+            LOGE("TPA2016_SET_POWER error.");
+            return -EIO;
+        } 
+        
+        if ( bEnableOut ) {
+            /* Enable both outputs */
+            tpa2016d2_regs[IC_REG-1] |= (SPK_EN_L | SPK_EN_R);
+            if (ioctl(TPA2016fd, TPA2016_SET_CONFIG, &tpa2016d2_regs ) < 0) {
+                LOGE("TPA2016_SET_CONFIG error.");
+                return -EIO;
+            }        
+        }
+    }
 
     return 0;
 }
