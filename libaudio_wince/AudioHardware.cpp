@@ -49,6 +49,7 @@ int (*msm72xx_set_acoustic_table)(int device, int volume);
 int (*msm72xx_set_acoustic_done)(void);
 int (*msm72xx_set_audio_path)(bool bEnableMic, bool bEnableDualMic, int device_out, bool bEnableOut);
 int (*msm72xx_update_audio_method)(int method);
+int (*msm72xx_get_bluetooth_hs_id)(const char* BT_Name);
 
 /* funtion prototypes */
 static int get_master_volume(void);
@@ -57,34 +58,36 @@ static status_t update_volume(struct msm_snd_volume_config* args,
                                       uint32_t fd);
 
 /* Default device for backward compatibility if libhtc_acoustic is not found */
-static uint32_t SND_DEVICE_CURRENT=256;
-static uint32_t SND_DEVICE_HANDSET=0;
-static uint32_t SND_DEVICE_SPEAKER=1;
-static uint32_t SND_DEVICE_HEADSET=2;
+static int SND_DEVICE_CURRENT=256;
+static int SND_DEVICE_HANDSET=0;
+static int SND_DEVICE_SPEAKER=1;
+static int SND_DEVICE_HEADSET=2;
 
-static uint32_t SND_DEVICE_BT=-1;
-static uint32_t SND_DEVICE_BT_EC_OFF=-1;
-static uint32_t SND_DEVICE_HEADSET_AND_SPEAKER=-1;
-static uint32_t SND_DEVICE_IN_S_SADC_OUT_HANDSET=-1;
-static uint32_t SND_DEVICE_IN_S_SADC_OUT_SPEAKER_PHONE=-1;
-static uint32_t SND_DEVICE_TTY_HEADSET=-1;
-static uint32_t SND_DEVICE_TTY_HCO=-1;
-static uint32_t SND_DEVICE_TTY_VCO=-1;
-static uint32_t SND_DEVICE_TTY_FULL=-1;
-static uint32_t SND_DEVICE_CARKIT=-1;
-static uint32_t SND_DEVICE_FM_SPEAKER=-1;
-static uint32_t SND_DEVICE_FM_HEADSET=-1;
-static uint32_t SND_DEVICE_HANDSET_ALL=-1;
-static uint32_t SND_DEVICE_NO_MIC_HEADSET=-1;
-static uint32_t SND_DEVICE_IDLE=-1;
+static int SND_DEVICE_BT=-1;
+static int SND_DEVICE_BT_EC_OFF=-1;
+static int SND_DEVICE_HEADSET_AND_SPEAKER=-1;
+static int SND_DEVICE_IN_S_SADC_OUT_HANDSET=-1;
+static int SND_DEVICE_IN_S_SADC_OUT_SPEAKER_PHONE=-1;
+static int SND_DEVICE_TTY_HEADSET=-1;
+static int SND_DEVICE_TTY_HCO=-1;
+static int SND_DEVICE_TTY_VCO=-1;
+static int SND_DEVICE_TTY_FULL=-1;
+static int SND_DEVICE_CARKIT=-1;
+static int SND_DEVICE_FM_SPEAKER=-1;
+static int SND_DEVICE_FM_HEADSET=-1;
+static int SND_DEVICE_HANDSET_ALL=-1;
+static int SND_DEVICE_NO_MIC_HEADSET=-1;
+static int SND_DEVICE_IDLE=-1;
 
 /* Specific pass-through device for special ops in libacoustic */
+#define BT_CUSTOM_DEVICES_ID_OFFSET     300     // This will be used for bluetooth custom devices
+
 static int SND_DEVICE_REC_INC_MIC = 252;
 static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
 static int SND_DEVICE_PLAYBACK_HEADSET = 254;
 
 static bool mAcousticInit = false;
-static unsigned int bCurrentOutStream = AudioSystem::DEFAULT;
+static int bCurrentOutStream = AudioSystem::DEFAULT;
 
 // ----------------------------------------------------------------------------
 
@@ -169,6 +172,11 @@ AudioHardware::AudioHardware() :
         msm72xx_update_audio_method = (int (*)(int))::dlsym(acoustic, "msm72xx_update_audio_method");
         if ((*msm72xx_update_audio_method) == 0 ) {
             LOGE("Could not link msm72xx_update_audio_method()");
+        }
+
+        msm72xx_get_bluetooth_hs_id =(int (*)(const char*))::dlsym(acoustic, "msm72xx_get_bluetooth_hs_id");
+        if ((*msm72xx_get_bluetooth_hs_id) == 0 ) {
+            LOGE("Could not link msm72xx_get_bluetooth_hs_id()");
         }
 	}
 
@@ -403,11 +411,15 @@ status_t AudioHardware::setParameters(const String8& keyValuePairs)
     key = String8(BT_NAME_KEY);
     if (param.get(key, value) == NO_ERROR) {
         mBluetoothId = 0;
-        for (int i = 0; i < mNumSndEndpoints; i++) {
-            if (!strcasecmp(value.string(), mSndEndpoints[i].name)) {
-                mBluetoothId = mSndEndpoints[i].id;
-                LOGI("Using custom acoustic parameters for %s", value.string());
-                break;
+        if ( mAcousticInit ) {
+            mBluetoothId = msm72xx_get_bluetooth_hs_id(value.string());
+        } else {
+            for (int i = 0; i < mNumSndEndpoints; i++) {
+                if (!strcasecmp(value.string(), mSndEndpoints[i].name)) {
+                    mBluetoothId = mSndEndpoints[i].id;
+                    LOGI("Using custom acoustic parameters for %s", value.string());
+                    break;
+                }
             }
         }
         if (mBluetoothId == 0) {
@@ -545,7 +557,7 @@ static int get_master_volume(void)
 static int reset_remote_audio(void) 
 {
     /* Reset remote audio (winmo call this on first snd_set_volume call) */
-    if ( SND_DEVICE_IDLE != (unsigned int)-1) {
+    if ( SND_DEVICE_IDLE != -1) {
         LOGV("Resetting remote audio");
         set_volume_rpc(SND_DEVICE_IDLE, 1, 5);
     } else {
@@ -686,7 +698,9 @@ status_t AudioHardware::update_device(struct msm_snd_device_config* args,
         args->device = SND_DEVICE_SPEAKER;
     } else if ( args->device == SND_DEVICE_PLAYBACK_HEADSET ) {
         args->device = SND_DEVICE_HEADSET;
-    } 
+    } else if ( args->device >= BT_CUSTOM_DEVICES_ID_OFFSET ) {
+        args->device = SND_DEVICE_BT;
+    }
  
     if (ioctl(fd, SND_SET_DEVICE, args) < 0) {
         LOGE("snd_set_device error.");
