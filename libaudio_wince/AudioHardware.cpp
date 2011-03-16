@@ -53,6 +53,8 @@ int (*msm72xx_update_audio_method)(int method);
 /* funtion prototypes */
 static int get_master_volume(void);
 static int reset_remote_audio(void);
+static status_t update_volume(struct msm_snd_volume_config* args,
+                                      uint32_t fd);
 
 /* Default device for backward compatibility if libhtc_acoustic is not found */
 static uint32_t SND_DEVICE_CURRENT=256;
@@ -81,12 +83,13 @@ static int SND_DEVICE_REC_INC_MIC = 252;
 static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
 static int SND_DEVICE_PLAYBACK_HEADSET = 254;
 
-static int bCurrentOutStream = AudioSystem::DEFAULT;
+static bool mAcousticInit = false;
+static unsigned int bCurrentOutStream = AudioSystem::DEFAULT;
 
 // ----------------------------------------------------------------------------
 
 AudioHardware::AudioHardware() :
-    mInit(false), mAcousticInit(false), mMicMute(true), mBluetoothNrec(true), mBluetoothId(0),
+    mInit(false), mMicMute(true), mBluetoothNrec(true), mBluetoothId(0),
     mOutput(0), mSndEndpoints(NULL), mCurSndDevice(-1)
 {
 
@@ -482,10 +485,14 @@ static status_t set_volume_rpc(uint32_t device,
      args.method = method;
      args.volume = volume;
 
-     if (ioctl(fd, SND_SET_VOLUME, &args) < 0) {
-         LOGE("snd_set_volume error.");
-         close(fd);
-         return -EIO;
+     if ( mAcousticInit ) {
+        update_volume(&args, fd);
+     } else {
+         if (ioctl(fd, SND_SET_VOLUME, &args) < 0) {
+             LOGE("snd_set_volume error.");
+             close(fd);
+             return -EIO;
+         }
      }
      close(fd);
      return NO_ERROR;
@@ -580,7 +587,7 @@ status_t AudioHardware::update_volume_new_device(uint32_t inputDevice)
 /* This function will be called when volume change is done. It will apply new
  * parameters in tables and manage the method used for audio volume control
  */
-status_t AudioHardware::update_volume(struct msm_snd_volume_config* args,
+static status_t update_volume(struct msm_snd_volume_config* args,
                                       uint32_t fd)
 {
     int device_method = SND_METHOD_NONE;
@@ -673,6 +680,13 @@ status_t AudioHardware::update_device(struct msm_snd_device_config* args,
     if ( msm72xx_set_acoustic_table != NULL ) {
         msm72xx_set_acoustic_table(args->device, get_master_volume());
     }
+
+    /* Redirect output to correct device for specials devices */
+    if ( args->device == SND_DEVICE_PLAYBACK_HANDSFREE ) {
+        args->device = SND_DEVICE_SPEAKER;
+    } else if ( args->device == SND_DEVICE_PLAYBACK_HEADSET ) {
+        args->device = SND_DEVICE_HEADSET;
+    } 
  
     if (ioctl(fd, SND_SET_DEVICE, args) < 0) {
         LOGE("snd_set_device error.");
@@ -686,7 +700,22 @@ status_t AudioHardware::update_device(struct msm_snd_device_config* args,
     return NO_ERROR;
 }
 
-static status_t do_route_audio_rpc(uint32_t device,
+static int getCurrentStream(void) 
+{
+    bool bStreamIsActive;
+    int stream;
+    
+    for (stream = AudioSystem::VOICE_CALL; stream<AudioSystem::NUM_STREAM_TYPES; stream++) {
+        AudioSystem::isStreamActive(stream, &bStreamIsActive);
+        if ( bStreamIsActive ) {
+            return stream;
+        }
+    }
+
+    return AudioSystem::DEFAULT;
+}
+
+status_t AudioHardware::do_route_audio_rpc(uint32_t device,
                                    bool ear_mute, bool mic_mute)
 {
     if (device == -1UL)
@@ -717,10 +746,14 @@ static status_t do_route_audio_rpc(uint32_t device,
     args.ear_mute = ear_mute ? SND_MUTE_MUTED : SND_MUTE_UNMUTED;
     args.mic_mute = mic_mute ? SND_MUTE_MUTED : SND_MUTE_UNMUTED;
 
-    if (ioctl(fd, SND_SET_DEVICE, &args) < 0) {
-        LOGE("snd_set_device error.");
-        close(fd);
-        return -EIO;
+    if ( mAcousticInit ) {
+       update_device(&args, fd);
+    } else {
+        if (ioctl(fd, SND_SET_DEVICE, &args) < 0) {
+            LOGE("snd_set_device error.");
+            close(fd);
+            return -EIO;
+        }
     }
 
     close(fd);
@@ -836,6 +869,9 @@ status_t AudioHardware::doRouting()
             msm72xx_enable_audpp(audProcess);
         }
         mCurSndDevice = sndDevice;
+
+        /* Update the acoustic hardware with new device settings */
+        update_volume_new_device(sndDevice);
     }
 
     return ret;
@@ -951,6 +987,7 @@ status_t AudioHardware::AudioStreamOutMSM72xx::set(
 
 AudioHardware::AudioStreamOutMSM72xx::~AudioStreamOutMSM72xx()
 {
+    bCurrentOutStream = getCurrentStream();
     if (mFd >= 0) close(mFd);
 }
 
@@ -1019,12 +1056,25 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
     if (mStartCount) {
         if (--mStartCount == 0) {
             ioctl(mFd, AUDIO_START, 0);
+            
+            if ( mAcousticInit ) {
+                /* Sets up acoustic hardware */
+                bCurrentOutStream = getCurrentStream();
+                if ( (bCurrentOutStream == AudioSystem::MUSIC) ) {
+                    if ( mHardware->mCurSndDevice == SND_DEVICE_SPEAKER ) {
+                        mHardware->doAudioRouteOrMute(SND_DEVICE_PLAYBACK_HANDSFREE);
+                    } else if ( mHardware->mCurSndDevice == SND_DEVICE_HEADSET ) {
+                        mHardware->doAudioRouteOrMute(SND_DEVICE_PLAYBACK_HEADSET);
+                    }
+                }
+            }
         }
     }
     return bytes;
 
 Error:
     if (mFd >= 0) {
+        bCurrentOutStream = getCurrentStream();
         ::close(mFd);
         mFd = -1;
     }
@@ -1038,6 +1088,7 @@ status_t AudioHardware::AudioStreamOutMSM72xx::standby()
 {
     status_t status = NO_ERROR;
     if (!mStandby && mFd >= 0) {
+        bCurrentOutStream = getCurrentStream();
         ::close(mFd);
         mFd = -1;
     }
