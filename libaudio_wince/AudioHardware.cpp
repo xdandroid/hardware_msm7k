@@ -34,7 +34,7 @@
 #include "AudioHardware.h"
 #include <media/AudioRecord.h>
 
-#define LOG_SND_RPC 0  // Set to 1 to log sound RPC's
+#define LOG_SND_RPC 1  // Set to 1 to log sound RPC's
 
 namespace android {
 static int audpre_index, tx_iir_index;
@@ -603,10 +603,11 @@ static status_t update_volume(struct msm_snd_volume_config* args,
                                       uint32_t fd)
 {
     int device_method = SND_METHOD_NONE;
+    int device = args->device;
 
-     if ( args->device != SND_DEVICE_IDLE ) {
+     if ( device != SND_DEVICE_IDLE ) {
          if ( msm72xx_set_acoustic_table != NULL ) {
-             device_method = msm72xx_set_acoustic_table(args->device, args->volume);
+             device_method = msm72xx_set_acoustic_table(device, args->volume);
          }
 
          /* Some devices do not require/support volume setting */
@@ -645,7 +646,7 @@ static status_t update_volume(struct msm_snd_volume_config* args,
 status_t AudioHardware::update_device(struct msm_snd_device_config* args,
                                       uint32_t fd)
 {
-    LOGV("AudioHardware::doAudioRouteOrMute %d", args->device);
+    LOGV("AudioHardware::update_device %d", args->device);
 
     /* If the current device is speaker, then lower the volume before 
      * switching to the new device.
@@ -694,14 +695,16 @@ status_t AudioHardware::update_device(struct msm_snd_device_config* args,
     }
 
     /* Redirect output to correct device for specials devices */
-    if ( args->device == SND_DEVICE_PLAYBACK_HANDSFREE ) {
+    if ( (int)args->device == SND_DEVICE_PLAYBACK_HANDSFREE ) {
         args->device = SND_DEVICE_SPEAKER;
-    } else if ( args->device == SND_DEVICE_PLAYBACK_HEADSET ) {
+    } else if ( (int)args->device == SND_DEVICE_PLAYBACK_HEADSET ) {
         args->device = SND_DEVICE_HEADSET;
-    } else if ( args->device >= BT_CUSTOM_DEVICES_ID_OFFSET ) {
+    } else if ( (int)args->device >= BT_CUSTOM_DEVICES_ID_OFFSET ) {
         args->device = SND_DEVICE_BT;
     }
  
+    LOGV("call snd_set_device %d", args->device);
+
     if (ioctl(fd, SND_SET_DEVICE, args) < 0) {
         LOGE("snd_set_device error.");
         close(fd);
@@ -721,6 +724,7 @@ static int getCurrentStream(void)
     
     for (stream = AudioSystem::VOICE_CALL; stream<AudioSystem::NUM_STREAM_TYPES; stream++) {
         AudioSystem::isStreamActive(stream, &bStreamIsActive);
+        //LOGV("Stream %d status : %d", stream, bStreamIsActive);
         if ( bStreamIsActive ) {
             return stream;
         }
