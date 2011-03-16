@@ -43,6 +43,13 @@ const uint32_t AudioHardware::inputSamplingRates[] = {
         8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000
 };
 
+int (*htc_acoustic_init)(void);
+int (*htc_acoustic_deinit)(void);
+int (*msm72xx_set_acoustic_table)(int device, int volume);
+int (*msm72xx_set_acoustic_done)(void);
+int (*msm72xx_set_audio_path)(bool bEnableMic, bool bEnableDualMic, int device_out, bool bEnableOut);
+int (*msm72xx_update_audio_method)(int method);
+
 /* Default device for backward compatibility if libhtc_acoustic is not found */
 static uint32_t SND_DEVICE_CURRENT=256;
 static uint32_t SND_DEVICE_HANDSET=0;
@@ -112,10 +119,47 @@ AudioHardware::AudioHardware() :
     }
 #endif
 
+    htc_acoustic_init = (int (*)(void))::dlsym(acoustic, "htc_acoustic_init");
+    if ((*htc_acoustic_init) == 0 ) {
+        LOGE("Could not link htc_acoustic_init()");
+    }
+
+    /* If acoustic init was ok, then continue linking other functions
+     * otherwise, don't link them so that the rest of the hardware
+     * can still work
+     */
+    if ( (htc_acoustic_init) && (htc_acoustic_init() != 0) ) {
+        LOGE("Failed to initialize htc acoutic system. Using basic hardware.");
+    } else {
+        htc_acoustic_deinit = (int (*)(void))::dlsym(acoustic, "htc_acoustic_deinit");
+        if ((*htc_acoustic_deinit) == 0 ) {
+            LOGE("Could not link htc_acoustic_deinit()");
+        }
+
+        msm72xx_set_acoustic_table = (int (*)(int, int))::dlsym(acoustic, "msm72xx_set_acoustic_table");
+        if ((*msm72xx_set_acoustic_table) == 0 ) {
+            LOGE("Could not link msm72xx_set_acoustic_table()");
+        }
+
+        msm72xx_set_acoustic_done = (int (*)(void))::dlsym(acoustic, "msm72xx_set_acoustic_done");
+        if ((*msm72xx_set_acoustic_done) == 0 ) {
+            LOGE("Could not link msm72xx_set_acoustic_done()");
+        }
+
+        msm72xx_set_audio_path = (int (*)(bool, bool, int, bool))::dlsym(acoustic, "msm72xx_set_audio_path");
+        if ((*msm72xx_set_audio_path) == 0 ) {
+            LOGE("Could not link msm72xx_set_audio_path()");
+        }
+
+        msm72xx_update_audio_method = (int (*)(int))::dlsym(acoustic, "msm72xx_update_audio_method");
+        if ((*msm72xx_update_audio_method) == 0 ) {
+            LOGE("Could not link msm72xx_update_audio_method()");
+        }
+    }
+
     snd_get_num = (int (*)(void))::dlsym(acoustic, "snd_get_num_endpoints");
     if ((*snd_get_num) == 0 ) {
         LOGE("Could not link snd_get_num()");
-//        return;
     }
 
     snd_get_endpoint = (int (*)(int, msm_snd_endpoint *))::dlsym(acoustic, "snd_get_endpoint");
