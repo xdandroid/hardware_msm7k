@@ -548,6 +548,10 @@ static int reset_remote_audio(void)
     return NO_ERROR;
 }
 
+/* This function will be called on device change to sets up the volume 
+ * on the new device and to update the audio settings accordling to the
+ * new device and new volume
+ */
 status_t AudioHardware::update_volume_new_device(uint32_t inputDevice)
 {
     /* Update volume in case of device change */
@@ -573,6 +577,9 @@ status_t AudioHardware::update_volume_new_device(uint32_t inputDevice)
     return NO_ERROR;
 }
 
+/* This function will be called when volume change is done. It will apply new
+ * parameters in tables and manage the method used for audio volume control
+ */
 status_t AudioHardware::update_volume(struct msm_snd_volume_config* args,
                                       uint32_t fd)
 {
@@ -612,6 +619,10 @@ status_t AudioHardware::update_volume(struct msm_snd_volume_config* args,
      return NO_ERROR;
 }
 
+/* This function will be called on device change, so that hardware and software changes
+ * will be done by the new acoustic library. It will enable outputs, set new tables,
+ * handle special modes (like music playback, enable mic while recording), ...
+ */
 status_t AudioHardware::update_device(struct msm_snd_device_config* args,
                                       uint32_t fd)
 {
