@@ -27,6 +27,9 @@
 
 extern "C" {
 #include <linux/msm_audio.h>
+
+#define SND_METHOD_NONE     -1
+#define SND_METHOD_AUDIO    1
 }
 
 namespace android {
@@ -109,6 +112,11 @@ public:
 
     virtual status_t    setVoiceVolume(float volume);
     virtual status_t    setMasterVolume(float volume);
+    virtual status_t    update_volume_new_device(uint32_t inputDevice);
+    virtual status_t    update_volume(struct msm_snd_volume_config* args,
+                                      uint32_t fd);
+    virtual status_t    update_device(struct msm_snd_device_config* args,
+                                      uint32_t fd);
 
     virtual status_t    setMode(int mode);
 
@@ -235,6 +243,7 @@ private:
 
             static const uint32_t inputSamplingRates[];
             bool        mInit;
+            bool        mAcousticInit;
             bool        mMicMute;
             bool        mBluetoothNrec;
             uint32_t    mBluetoothId;

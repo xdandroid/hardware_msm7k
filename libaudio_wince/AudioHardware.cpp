@@ -50,6 +50,10 @@ int (*msm72xx_set_acoustic_done)(void);
 int (*msm72xx_set_audio_path)(bool bEnableMic, bool bEnableDualMic, int device_out, bool bEnableOut);
 int (*msm72xx_update_audio_method)(int method);
 
+/* funtion prototypes */
+static int get_master_volume(void);
+static int reset_remote_audio(void);
+
 /* Default device for backward compatibility if libhtc_acoustic is not found */
 static uint32_t SND_DEVICE_CURRENT=256;
 static uint32_t SND_DEVICE_HANDSET=0;
@@ -72,10 +76,17 @@ static uint32_t SND_DEVICE_HANDSET_ALL=-1;
 static uint32_t SND_DEVICE_NO_MIC_HEADSET=-1;
 static uint32_t SND_DEVICE_IDLE=-1;
 
+/* Specific pass-through device for special ops in libacoustic */
+static int SND_DEVICE_REC_INC_MIC = 252;
+static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
+static int SND_DEVICE_PLAYBACK_HEADSET = 254;
+
+static int bCurrentOutStream = AudioSystem::DEFAULT;
+
 // ----------------------------------------------------------------------------
 
 AudioHardware::AudioHardware() :
-    mInit(false), mMicMute(true), mBluetoothNrec(true), mBluetoothId(0),
+    mInit(false), mAcousticInit(false), mMicMute(true), mBluetoothNrec(true), mBluetoothId(0),
     mOutput(0), mSndEndpoints(NULL), mCurSndDevice(-1)
 {
 
@@ -119,7 +130,7 @@ AudioHardware::AudioHardware() :
     }
 #endif
 
-    htc_acoustic_init = (int (*)(void))::dlsym(acoustic, "htc_acoustic_init");
+	htc_acoustic_init = (int (*)(void))::dlsym(acoustic, "htc_acoustic_init");
     if ((*htc_acoustic_init) == 0 ) {
         LOGE("Could not link htc_acoustic_init()");
     }
@@ -128,9 +139,10 @@ AudioHardware::AudioHardware() :
      * otherwise, don't link them so that the rest of the hardware
      * can still work
      */
-    if ( (htc_acoustic_init) && (htc_acoustic_init() != 0) ) {
+    if ( (htc_acoustic_init) && ( htc_acoustic_init() != 0) ) {
         LOGE("Failed to initialize htc acoutic system. Using basic hardware.");
     } else {
+        mAcousticInit = true;
         htc_acoustic_deinit = (int (*)(void))::dlsym(acoustic, "htc_acoustic_deinit");
         if ((*htc_acoustic_deinit) == 0 ) {
             LOGE("Could not link htc_acoustic_deinit()");
@@ -155,7 +167,7 @@ AudioHardware::AudioHardware() :
         if ((*msm72xx_update_audio_method) == 0 ) {
             LOGE("Could not link msm72xx_update_audio_method()");
         }
-    }
+	}
 
     snd_get_num = (int (*)(void))::dlsym(acoustic, "snd_get_num_endpoints");
     if ((*snd_get_num) == 0 ) {
@@ -207,6 +219,8 @@ AudioHardware::AudioHardware() :
         LOGV("constructed %d default SND endpoints", mNumSndEndpoints);
         mInit = true;
     }
+
+    reset_remote_audio();
 }
 
 AudioHardware::~AudioHardware()
@@ -217,6 +231,12 @@ AudioHardware::~AudioHardware()
     mInputs.clear();
     closeOutputStream((AudioStreamOut*)mOutput);
     delete [] mSndEndpoints;
+
+    /* In case we could initialize new acoustic library, then deinit to free memory */
+    if ( (htc_acoustic_deinit != NULL) && mAcousticInit ) {
+        htc_acoustic_deinit();
+    }
+
     if (acoustic) {
         ::dlclose(acoustic);
         acoustic = 0;
@@ -505,6 +525,154 @@ status_t AudioHardware::setMasterVolume(float v)
     // volume on top of the maximum volume that we set through the SND API.
     // return error - software mixer will handle it
     return -1;
+}
+
+static int get_master_volume(void) 
+{
+    float volume;
+    AudioSystem::getMasterVolume(&volume);
+    volume = ceil(volume * 5.0);
+    return volume;
+}
+
+static int reset_remote_audio(void) 
+{
+    /* Reset remote audio (winmo call this on first snd_set_volume call) */
+    if ( SND_DEVICE_IDLE != (unsigned int)-1) {
+        LOGV("Resetting remote audio");
+        set_volume_rpc(SND_DEVICE_IDLE, 1, 5);
+    } else {
+        LOGE("Can't reset modem audio, SND_DEVICE_IDLE not defined");
+        return -EIO;
+    }
+    return NO_ERROR;
+}
+
+status_t AudioHardware::update_volume_new_device(uint32_t inputDevice)
+{
+    /* Update volume in case of device change */
+    int volume = get_master_volume();
+    
+    /* When in call, use the METHOD_VOICE to set the volume */
+    if ( mMode == AudioSystem::MODE_IN_CALL ) {
+        set_volume_rpc(mCurSndDevice, SND_METHOD_VOICE, volume);
+    /* If recording sound via internal mics, use METHOD_AUDIO */
+    } else if ( (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
+                (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) ) {
+        set_volume_rpc(SND_DEVICE_REC_INC_MIC, SND_METHOD_AUDIO, volume);
+    /* All other cases */
+    } else {
+        set_volume_rpc(mCurSndDevice, mMode != AudioSystem::MODE_IN_CALL, volume);
+    }  
+
+    /* Tell the audio acoustic controller that we have processed the new settings */
+    if ( msm72xx_set_acoustic_done != NULL ) {
+        msm72xx_set_acoustic_done();
+    }
+
+    return NO_ERROR;
+}
+
+status_t AudioHardware::update_volume(struct msm_snd_volume_config* args,
+                                      uint32_t fd)
+{
+    int device_method = SND_METHOD_NONE;
+
+     if ( args->device != SND_DEVICE_IDLE ) {
+         if ( msm72xx_set_acoustic_table != NULL ) {
+             device_method = msm72xx_set_acoustic_table(args->device, args->volume);
+         }
+
+         /* Some devices do not require/support volume setting */
+         if ( device_method != SND_METHOD_NONE ) {
+             /* Some devices only accept volume level 5 */
+             if ( device_method == SND_METHOD_AUDIO ) {
+                LOGV("call snd_set_volume audio 5");
+                args->device = SND_DEVICE_IDLE;
+                args->method = SND_METHOD_AUDIO;
+                args->volume = 5;
+             } else {
+                LOGV("call snd_set_volume voice %d", args->volume);
+            }
+
+             if (ioctl(fd, SND_SET_VOLUME, args) < 0) {
+                 LOGE("snd_set_volume error.");
+                 close(fd);
+                 return -EIO;
+             }
+         }
+     } else {
+         if (ioctl(fd, SND_SET_VOLUME, args) < 0) {
+             LOGE("snd_set_volume error.");
+             close(fd);
+             return -EIO;
+         }
+     }
+
+     return NO_ERROR;
+}
+
+status_t AudioHardware::update_device(struct msm_snd_device_config* args,
+                                      uint32_t fd)
+{
+    LOGV("AudioHardware::doAudioRouteOrMute %d", args->device);
+
+    /* If the current device is speaker, then lower the volume before 
+     * switching to the new device.
+     * On some device, it can cause power collapse if speaker is not powered off
+     * (i.e : on diamond)
+     */
+    set_volume_rpc(SND_DEVICE_CURRENT, mMode != AudioSystem::MODE_IN_CALL, 0);
+
+    /* Microphone should be un-muted when recording or during voice call */    
+    AudioStreamInMSM72xx *input = getActiveInput_l();
+    if ( input == NULL ) 
+    {
+        /* To be removed if the "send_mic_mute_to_AudioManager" param is set
+         * to true in the phone app config file (/packages/apps/Phone/res/values/config.xml)
+         */
+        if ( mMode != AudioSystem::MODE_IN_CALL ) {
+            args->mic_mute = true;  
+        } else {
+            args->mic_mute = false;
+        }
+    } else {
+        uint32_t inputDevice = input->devices();
+        if ( (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
+             (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) ) {
+            args->mic_mute = false;  
+        } else {
+            args->mic_mute = true;
+        }
+    }
+
+    if ( msm72xx_set_audio_path != NULL ) {
+        bool bEnableOut = false;
+        /* XXX: Can't be used. @ boot time, isStreamActive blocks media service.
+        bool bMusic;
+        AudioSystem::isStreamActive(AudioSystem::MUSIC, &bMusic);*/
+        if ( (mMode == AudioSystem::MODE_IN_CALL) || (bCurrentOutStream != AudioSystem::DEFAULT) ) {
+            bEnableOut = true;    
+        }
+        msm72xx_set_audio_path(!args->mic_mute, 0, args->device, bEnableOut );
+    }
+
+
+    // TODO : switch on/off leds as done in msm_setup_audio() ? 
+    if ( msm72xx_set_acoustic_table != NULL ) {
+        msm72xx_set_acoustic_table(args->device, get_master_volume());
+    }
+ 
+    if (ioctl(fd, SND_SET_DEVICE, args) < 0) {
+        LOGE("snd_set_device error.");
+        close(fd);
+        return -EIO;
+    }
+
+    if ( msm72xx_set_acoustic_done != NULL ) {
+        msm72xx_set_acoustic_done();
+    }
+    return NO_ERROR;
 }
 
 static status_t do_route_audio_rpc(uint32_t device,
