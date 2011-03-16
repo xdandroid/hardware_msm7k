@@ -464,9 +464,10 @@ static int ParseAudioParaLine(char* line, int len)
                 BT_Phone_Acoustic_Table[table_num].array[field_count++] = strtol(token, &ps, 16);
             };
 #endif
-            if ( BTPAT_max_index < 100 ) {
-                strncpy(BT_Phone_Acoustic_Table[BTPAT_max_index].table.name, token, MAX_MODE_NAME_LENGTH);
-                strtok(NULL, ",");            
+            /* Skip the table number field */
+            token = strtok(NULL, ",");
+            if ( BTPAT_max_index < 100 ) {  
+                strncpy(BT_Phone_Acoustic_Table[BTPAT_max_index].table.name, token, MAX_MODE_NAME_LENGTH);          
                 LOGV("BT Phone Acoustic Table: %s\n", BT_Phone_Acoustic_Table[BTPAT_max_index].table.name);
                 while ( (token = strtok(NULL, ",")) ) {
                     BT_Phone_Acoustic_Table[table_num].array[field_count++] = strtol(token, &ps, 16);
