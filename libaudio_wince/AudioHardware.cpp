@@ -1017,7 +1017,8 @@ status_t AudioHardware::AudioStreamOutMSM72xx::set(
 
 AudioHardware::AudioStreamOutMSM72xx::~AudioStreamOutMSM72xx()
 {
-    bCurrentOutStream = getCurrentStream();
+    bCurrentOutStream = AudioSystem::DEFAULT;
+    mHardware->doAudioRouteOrMute(SND_DEVICE_CURRENT);
     if (mFd >= 0) close(mFd);
 }
 
@@ -1086,7 +1087,7 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
     if (mStartCount) {
         if (--mStartCount == 0) {
             ioctl(mFd, AUDIO_START, 0);
-            
+         
             if ( mAcousticInit ) {
                 /* Sets up acoustic hardware */
                 bCurrentOutStream = getCurrentStream();
@@ -1104,7 +1105,8 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
 
 Error:
     if (mFd >= 0) {
-        bCurrentOutStream = getCurrentStream();
+        bCurrentOutStream = AudioSystem::DEFAULT;
+        mHardware->doAudioRouteOrMute(SND_DEVICE_CURRENT);
         ::close(mFd);
         mFd = -1;
     }
@@ -1118,7 +1120,8 @@ status_t AudioHardware::AudioStreamOutMSM72xx::standby()
 {
     status_t status = NO_ERROR;
     if (!mStandby && mFd >= 0) {
-        bCurrentOutStream = getCurrentStream();
+        bCurrentOutStream = AudioSystem::DEFAULT;
+        mHardware->doAudioRouteOrMute(SND_DEVICE_CURRENT);
         ::close(mFd);
         mFd = -1;
     }
