@@ -205,7 +205,6 @@ AudioHardware::AudioHardware() :
 #define CHECK_FOR(desc) \
                 if (!strcmp(ept->name, #desc)) { \
                     SND_DEVICE_##desc = ept->id; \
-                    LOGD("BT MATCH " #desc); \
                 } else
                 CHECK_FOR(CURRENT)
                 CHECK_FOR(HANDSET)
@@ -231,7 +230,12 @@ AudioHardware::AudioHardware() :
         mInit = true;
     }
 
+    if ( SND_DEVICE_IDLE != -1 ) { 
+        mCurSndDevice = SND_DEVICE_IDLE;
+    }
     reset_remote_audio();
+
+    LOGV("AudioHardware::AudioHardware Initialized\n");
 }
 
 AudioHardware::~AudioHardware()
@@ -605,6 +609,8 @@ static status_t update_volume(struct msm_snd_volume_config* args,
     int device_method = SND_METHOD_NONE;
     int device = args->device;
 
+    LOGV("update_volume %d %d %d", args->device, args->method, args->volume);
+
      if ( device != SND_DEVICE_IDLE ) {
          if ( msm72xx_set_acoustic_table != NULL ) {
              device_method = msm72xx_set_acoustic_table(device, args->volume);
@@ -648,14 +654,18 @@ status_t AudioHardware::update_device(struct msm_snd_device_config* args,
 {
     LOGV("AudioHardware::update_device %d", args->device);
 
+    /* Close /dev/msm_snd because set_volume_rpc will open it */
+    close(fd);
     /* If the current device is speaker, then lower the volume before 
      * switching to the new device.
      * On some device, it can cause power collapse if speaker is not powered off
      * (i.e : on diamond)
      */
-    set_volume_rpc(SND_DEVICE_CURRENT, mMode != AudioSystem::MODE_IN_CALL, 0);
+    if ( mCurSndDevice != SND_DEVICE_IDLE ) {
+        set_volume_rpc(SND_DEVICE_CURRENT, mMode != AudioSystem::MODE_IN_CALL, 0);
+    }
 
-    /* Microphone should be un-muted when recording or during voice call */    
+    /* Microphone should be un-muted when recording or during voice call */
     AudioStreamInMSM72xx *input = getActiveInput_l();
     if ( input == NULL ) 
     {
@@ -704,6 +714,13 @@ status_t AudioHardware::update_device(struct msm_snd_device_config* args,
     }
  
     LOGV("call snd_set_device %d", args->device);
+
+    /* Re-open msm_snd to set device */
+    fd = open("/dev/msm_snd", O_RDWR);
+    if (fd < 0) {
+        LOGE("Can not open snd device");
+        return -EPERM;
+    }
 
     if (ioctl(fd, SND_SET_DEVICE, args) < 0) {
         LOGE("snd_set_device error.");
@@ -1091,12 +1108,13 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
             if ( mAcousticInit ) {
                 /* Sets up acoustic hardware */
                 bCurrentOutStream = getCurrentStream();
-                if ( (bCurrentOutStream == AudioSystem::MUSIC) ) {
-                    if ( mHardware->mCurSndDevice == SND_DEVICE_SPEAKER ) {
-                        mHardware->doAudioRouteOrMute(SND_DEVICE_PLAYBACK_HANDSFREE);
-                    } else if ( mHardware->mCurSndDevice == SND_DEVICE_HEADSET ) {
-                        mHardware->doAudioRouteOrMute(SND_DEVICE_PLAYBACK_HEADSET);
-                    }
+                if ( mHardware->mCurSndDevice == SND_DEVICE_SPEAKER ) {
+                    mHardware->doAudioRouteOrMute(SND_DEVICE_PLAYBACK_HANDSFREE);
+                } else if ( mHardware->mCurSndDevice == SND_DEVICE_HEADSET ) {
+                    mHardware->doAudioRouteOrMute(SND_DEVICE_PLAYBACK_HEADSET);
+                } else {
+                    /* Let the device be choosen by actual settings */
+                    mHardware->doRouting();
                 }
             }
         }
