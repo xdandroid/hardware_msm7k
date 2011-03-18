@@ -1621,6 +1621,11 @@ int msm72xx_get_bluetooth_hs_id(const char* BT_Name)
         }
     }
 
+    if (i == BTPAT_max_index) {
+        LOGI("Couldn't find custom acoustic parameters for %s, using default", BT_Name);
+        i = 0;
+    }
+
     return i + BT_CUSTOM_DEVICES_ID_OFFSET;
 }
 
