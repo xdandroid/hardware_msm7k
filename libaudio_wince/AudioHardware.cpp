@@ -579,6 +579,8 @@ status_t AudioHardware::update_volume_new_device(uint32_t inputDevice)
 {
     /* Update volume in case of device change */
     int volume = get_master_volume();
+
+    LOGV("AudioHardware::update_volume_new_device %d", mCurSndDevice);
     
     /* When in call, use the METHOD_VOICE to set the volume */
     if ( mMode == AudioSystem::MODE_IN_CALL ) {
@@ -611,7 +613,7 @@ static status_t update_volume(struct msm_snd_volume_config* args,
 
     LOGV("update_volume %d %d %d", args->device, args->method, args->volume);
 
-     if ( device != SND_DEVICE_IDLE ) {
+    if ( device != SND_DEVICE_IDLE ) {
          if ( msm72xx_set_acoustic_table != NULL ) {
              device_method = msm72xx_set_acoustic_table(device, args->volume);
          }
@@ -634,15 +636,15 @@ static status_t update_volume(struct msm_snd_volume_config* args,
                  return -EIO;
              }
          }
-     } else {
+    } else {
          if (ioctl(fd, SND_SET_VOLUME, args) < 0) {
              LOGE("snd_set_volume error.");
              close(fd);
              return -EIO;
          }
-     }
+    }
 
-     return NO_ERROR;
+    return NO_ERROR;
 }
 
 /* This function will be called on device change, so that hardware and software changes
@@ -713,6 +715,11 @@ status_t AudioHardware::update_device(struct msm_snd_device_config* args,
         args->device = SND_DEVICE_BT;
     }
  
+    /* Do not use SND_DEVICE_CURRENT */
+    if ( args->device == SND_DEVICE_CURRENT ) {
+        args->device = mCurSndDevice;
+    }
+
     LOGV("call snd_set_device %d", args->device);
 
     /* Re-open msm_snd to set device */
@@ -1104,7 +1111,7 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
     if (mStartCount) {
         if (--mStartCount == 0) {
             ioctl(mFd, AUDIO_START, 0);
-         
+     
             if ( mAcousticInit ) {
                 /* Sets up acoustic hardware */
                 bCurrentOutStream = getCurrentStream();
