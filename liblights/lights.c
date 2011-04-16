@@ -45,6 +45,7 @@ static int g_buttons = 0;
 static int g_attention = 0;
 static int g_haveAmberLed = 0;
 static int g_brightnessMode = 0;
+static int g_haveSysFsAutoBacklight = 0;
 
 char const*const TRACKBALL_FILE
         = "/sys/class/leds/jogball-backlight/brightness";
@@ -82,8 +83,11 @@ char const*const KEYBOARD_FILE
 char const*const BUTTON_FILE
         = "/sys/class/leds/button-backlight/brightness";
 
-char const*const LS_FILE
-	= "/dbgfs/micropklt_dbg/auto_backlight";
+char const*const AUTOBL_FILE_DBGFS
+        = "/dbgfs/micropklt_dbg/auto_backlight";
+
+char const*const AUTOBL_FILE_SYSFS
+        = "/sys/class/leds/lcd-backlight/auto_backlight";
 
 /**
  * device methods
@@ -100,6 +104,11 @@ void init_globals(void)
     /* figure out if we have the amber LED or not.
        If yes, just support green and amber.         */
     g_haveAmberLed = (access(AMBER_LED_FILE, W_OK) == 0) ? 1 : 0;
+
+    g_haveSysFsAutoBacklight = (access(AUTOBL_FILE_SYSFS, W_OK) == 0) ? 1 : 0;
+
+    LOGD("trackballLight=%d amberLed=%d sysFsAutoBacklight=%d\n",
+        g_haveTrackballLight, g_haveAmberLed, g_haveSysFsAutoBacklight);
 }
 
 static int
@@ -169,9 +178,10 @@ set_light_backlight(struct light_device_t* dev,
 
     if (g_brightnessMode != state->brightnessMode) {
         g_brightnessMode = state->brightnessMode;
-        LOGD("Switched brightnessMode=%d brightness=%d\n",g_brightnessMode,
+        LOGD("Switched brightnessMode=%d brightness=%d\n", g_brightnessMode,
             brightness);
-        write_int(LS_FILE, state->brightnessMode);
+        err = write_int(g_haveSysFsAutoBacklight
+            ? AUTOBL_FILE_SYSFS : AUTOBL_FILE_DBGFS, g_brightnessMode);
     }
     // if we switched to user mode, allow for setting the backlight immedeately
     if (g_brightnessMode == BRIGHTNESS_MODE_USER){
