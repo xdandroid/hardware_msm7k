@@ -73,7 +73,7 @@ struct be_table_s {
 struct d_table_s {
     union {
         struct d_table_st table;
-        uint16_t array[0xB];        // Size = 0x8 on some devices like diamond.
+        uint16_t array[0xB];
     };
 };
 
@@ -198,36 +198,32 @@ static int get_device_capabilities(void)
     LOGV("- Dual mic supported : %s", (device_capabilities.bDualMicSupported)?"true":"false");
 
     /* Test for TPA2016 */
-    if ( device_capabilities.bUseTPA2016 ) {
-        TPA2016fd = open(MSM_TPA2016D2_DEV, O_RDWR);
-        if ( TPA2016fd < 0 ) {
-            LOGE("Error opening dev %s (fd = %d). Error %s (%d)", MSM_TPA2016D2_DEV, acousticfd,
-                        strerror(errno), errno);
-            LOGE("Device claims to have TPA2016 amplifier but %s not present. Disable TPA2016", MSM_TPA2016D2_DEV);
-            device_capabilities.bUseTPA2016 = false;
-        } else {
-            /* Power on amplifier */
-            bOn = 1;
-            if (ioctl(TPA2016fd, TPA2016_SET_POWER, &bOn ) < 0) {
-                LOGE("TPA2016_SET_POWER error.");
-                return -EIO;
-            }
+    TPA2016fd = open(MSM_TPA2016D2_DEV, O_RDWR);
+    if ( TPA2016fd < 0 ) {
+        LOGE("Error opening dev %s (fd = %d). Error %s (%d)", MSM_TPA2016D2_DEV, acousticfd,
+                    strerror(errno), errno);
+    } else {
+        /* Power on amplifier */
+        bOn = 1;
+        if (ioctl(TPA2016fd, TPA2016_SET_POWER, &bOn ) < 0) {
+            LOGE("TPA2016_SET_POWER error.");
+            return -EIO;
+        }
 
-            /* Read current device configuration */
-            if (ioctl(TPA2016fd, TPA2016_READ_CONFIG, &tpa2016d2_regs ) < 0) {
-                LOGE("TPA2016_READ_CONFIG error.");
-                return -EIO;
-            }  
+        /* Read current device configuration */
+        if (ioctl(TPA2016fd, TPA2016_READ_CONFIG, &tpa2016d2_regs ) < 0) {
+            LOGE("TPA2016_READ_CONFIG error.");
+            return -EIO;
+        }  
 
-            /* Power off amplifier */
-            bOn = 0;
-            if (ioctl(TPA2016fd, TPA2016_SET_POWER, &bOn ) < 0) {
-                LOGE("TPA2016_SET_POWER error.");
-                return -EIO;
-            }
-        } 
-    }
-    LOGV("- Use TPA2016 Amplifier : %s", (device_capabilities.bUseTPA2016)?"true":"false");
+        /* Power off amplifier */
+        bOn = 0;
+        if (ioctl(TPA2016fd, TPA2016_SET_POWER, &bOn ) < 0) {
+            LOGE("TPA2016_SET_POWER error.");
+            return -EIO;
+        }
+    } 
+    LOGV("- Use TPA2016 Amplifier : %s", (TPA2016fd >= 0)?"true":"false");
     return 0;
 }
 
@@ -1182,7 +1178,7 @@ int htc_acoustic_deinit(void)
     close(acousticfd);
 
     /* Close TPA2016 */
-    if ( device_capabilities.bUseTPA2016 ) {
+    if ( TPA2016fd >= 0 ) {
         close(TPA2016fd);
     }
 
@@ -1516,7 +1512,7 @@ int msm72xx_set_acoustic_table(int device, int volume)
         }
 
         /* Set TPA2016 specific parameters if existing */
-        if ( (device_capabilities.bUseTPA2016) &&
+        if ( (TPA2016fd >= 0) &&
                 ((out_path == HANDSFREE) || (out_path == PLAYBACK_HANDSFREE)) ) {
             if ( out_path_method == SND_METHOD_NONE ) {
                 goto exit;
@@ -1591,7 +1587,7 @@ int msm72xx_set_audio_path(bool bEnableMic, bool bEnableDualMic,
         return -EIO;
     } 
 
-    if ( device_capabilities.bUseTPA2016 ) {
+    if ( TPA2016fd >= 0 ) {
         if (ioctl(TPA2016fd, TPA2016_SET_POWER, &audio_path.bEnableSpeaker ) < 0) {
             LOGE("TPA2016_SET_POWER error.");
             return -EIO;

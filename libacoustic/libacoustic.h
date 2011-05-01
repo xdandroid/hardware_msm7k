@@ -29,7 +29,6 @@
 struct msm_acoustic_capabilities {
     char htc_voc_cal_fields_per_param;    /* Specifies the number of fields per parameter */
     bool bDualMicSupported;
-    bool bUseTPA2016;
     /* TODO : keep up-to-date with new fields in kernel */
 };
 
