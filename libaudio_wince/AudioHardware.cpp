@@ -58,6 +58,7 @@ int (*msm72xx_get_bluetooth_hs_id)(const char* BT_Name);
  * Local Function prototypes
  ****************************************************************************/
 static int set_initial_audio_volume(void);
+static int get_master_volume(void);
 
 /****************************************************************************
  * Sound devices ids
@@ -551,6 +552,37 @@ status_t AudioHardware::setMasterVolume(float v)
     return -1;
 }
 
+/* This function will be called on device change to sets up the volume 
+ * on the new device and to update the audio settings accordling to the
+ * new device and new volume
+ */
+status_t AudioHardware::doUpdateVolume(uint32_t inputDevice)
+{
+    /* Update volume in case of device change */
+    int volume = get_master_volume();
+
+    LOGV("AudioHardware::doUpdateVolume %d", mCurSndDevice);
+    
+    /* When in call, use the METHOD_VOICE to set the volume */
+    if ( mMode == AudioSystem::MODE_IN_CALL ) {
+        set_volume_rpc(mCurSndDevice, SND_METHOD_VOICE, volume);
+    /* If recording sound via internal mics, use METHOD_AUDIO */
+    } else if ( (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
+                (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) ) {
+        set_volume_rpc(SND_DEVICE_REC_INC_MIC, SND_METHOD_AUDIO, volume);
+    /* All other cases */
+    } else {
+        set_volume_rpc(mCurSndDevice, mMode != AudioSystem::MODE_IN_CALL, volume);
+    }  
+
+    /* Tell the audio acoustic controller that we have processed the new settings */
+    if ( msm72xx_set_acoustic_done != NULL ) {
+        msm72xx_set_acoustic_done();
+    }
+
+    return NO_ERROR;
+}
+
 static status_t do_route_audio_rpc(uint32_t device,
                                    bool ear_mute, bool mic_mute)
 {
@@ -701,6 +733,11 @@ status_t AudioHardware::doRouting()
             msm72xx_enable_audpp(audProcess);
         }
         mCurSndDevice = sndDevice;
+
+        if ( mUseAcoustic ) {
+            /* Update the acoustic hardware with new device settings */
+            doUpdateVolume(sndDevice);
+        }
     }
 
     return ret;
@@ -1270,6 +1307,14 @@ static int set_initial_audio_volume(void)
         return -EIO;
     }
     return NO_ERROR;
+}
+
+static int get_master_volume(void) 
+{
+    float volume;
+    AudioSystem::getMasterVolume(&volume);
+    volume = ceil(volume * 5.0);
+    return volume;
 }
 
 }; // namespace android
