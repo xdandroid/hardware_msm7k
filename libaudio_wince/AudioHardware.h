@@ -27,9 +27,6 @@
 
 extern "C" {
 #include <linux/msm_audio.h>
-
-#define SND_METHOD_NONE     -1
-#define SND_METHOD_AUDIO    1
 }
 
 namespace android {
@@ -112,11 +109,6 @@ public:
 
     virtual status_t    setVoiceVolume(float volume);
     virtual status_t    setMasterVolume(float volume);
-    virtual status_t    update_volume_new_device(uint32_t inputDevice);
-    virtual status_t    do_route_audio_rpc(uint32_t device,
-                                   bool ear_mute, bool mic_mute);
-    virtual status_t    update_device(struct msm_snd_device_config* args,
-                                      uint32_t fd);
 
     virtual status_t    setMode(int mode);
 
@@ -255,6 +247,21 @@ private:
 
      friend class AudioStreamInMSM72xx;
             Mutex       mLock;
+
+            int SND_DEVICE_CURRENT;
+            int SND_DEVICE_HANDSET;
+            int SND_DEVICE_SPEAKER;
+            int SND_DEVICE_HEADSET;
+            int SND_DEVICE_BT;
+            int SND_DEVICE_CARKIT;
+            int SND_DEVICE_TTY_FULL;
+            int SND_DEVICE_TTY_VCO;
+            int SND_DEVICE_TTY_HCO;
+            int SND_DEVICE_NO_MIC_HEADSET;
+            int SND_DEVICE_FM_HEADSET;
+            int SND_DEVICE_HEADSET_AND_SPEAKER;
+            int SND_DEVICE_FM_SPEAKER;
+            int SND_DEVICE_BT_EC_OFF;
 };
 
 // ----------------------------------------------------------------------------

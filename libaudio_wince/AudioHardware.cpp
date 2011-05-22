@@ -16,8 +16,8 @@
 
 #include <math.h>
 
-#define LOG_NDEBUG 0
-#define LOG_TAG "AudioHardwareMSM72XX_wince"
+//#define LOG_NDEBUG 0
+#define LOG_TAG "AudioHardwareMSM72XX"
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -34,7 +34,7 @@
 #include "AudioHardware.h"
 #include <media/AudioRecord.h>
 
-#define LOG_SND_RPC 1  // Set to 1 to log sound RPC's
+#define LOG_SND_RPC 0  // Set to 1 to log sound RPC's
 
 namespace android {
 static int audpre_index, tx_iir_index;
@@ -42,65 +42,30 @@ static void * acoustic;
 const uint32_t AudioHardware::inputSamplingRates[] = {
         8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000
 };
-
-int (*htc_acoustic_init)(void);
-int (*htc_acoustic_deinit)(void);
-int (*msm72xx_set_acoustic_table)(int device, int volume);
-int (*msm72xx_set_acoustic_done)(void);
-int (*msm72xx_set_audio_path)(bool bEnableMic, bool bEnableDualMic, int device_out, bool bEnableOut);
-int (*msm72xx_update_audio_method)(int method);
-int (*msm72xx_get_bluetooth_hs_id)(const char* BT_Name);
-
-/* funtion prototypes */
-static int get_master_volume(void);
-static int reset_remote_audio(void);
-static status_t update_volume(struct msm_snd_volume_config* args,
-                                      uint32_t fd);
-
-/* Default device for backward compatibility if libhtc_acoustic is not found */
-static int SND_DEVICE_CURRENT=256;
-static int SND_DEVICE_HANDSET=0;
-static int SND_DEVICE_SPEAKER=1;
-static int SND_DEVICE_HEADSET=2;
-
-static int SND_DEVICE_BT=-1;
-static int SND_DEVICE_BT_EC_OFF=-1;
-static int SND_DEVICE_HEADSET_AND_SPEAKER=-1;
-static int SND_DEVICE_IN_S_SADC_OUT_HANDSET=-1;
-static int SND_DEVICE_IN_S_SADC_OUT_SPEAKER_PHONE=-1;
-static int SND_DEVICE_TTY_HEADSET=-1;
-static int SND_DEVICE_TTY_HCO=-1;
-static int SND_DEVICE_TTY_VCO=-1;
-static int SND_DEVICE_TTY_FULL=-1;
-static int SND_DEVICE_CARKIT=-1;
-static int SND_DEVICE_FM_SPEAKER=-1;
-static int SND_DEVICE_FM_HEADSET=-1;
-static int SND_DEVICE_HANDSET_ALL=-1;
-static int SND_DEVICE_NO_MIC_HEADSET=-1;
-static int SND_DEVICE_IDLE=-1;
-
-/* Specific pass-through device for special ops in libacoustic */
-#define BT_CUSTOM_DEVICES_ID_OFFSET     300     // This will be used for bluetooth custom devices
-
-static int SND_DEVICE_REC_INC_MIC = 252;
-static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
-static int SND_DEVICE_PLAYBACK_HEADSET = 254;
-
-static bool mAcousticInit = false;
-static int bCurrentOutStream = AudioSystem::DEFAULT;
-
 // ----------------------------------------------------------------------------
 
 AudioHardware::AudioHardware() :
     mInit(false), mMicMute(true), mBluetoothNrec(true), mBluetoothId(0),
-    mOutput(0), mSndEndpoints(NULL), mCurSndDevice(-1)
+    mOutput(0), mSndEndpoints(NULL), mCurSndDevice(-1),
+    SND_DEVICE_CURRENT(-1),
+    SND_DEVICE_HANDSET(-1),
+    SND_DEVICE_SPEAKER(-1),
+    SND_DEVICE_HEADSET(-1),
+    SND_DEVICE_BT(-1),
+    SND_DEVICE_CARKIT(-1),
+    SND_DEVICE_TTY_FULL(-1),
+    SND_DEVICE_TTY_VCO(-1),
+    SND_DEVICE_TTY_HCO(-1),
+    SND_DEVICE_NO_MIC_HEADSET(-1),
+    SND_DEVICE_FM_HEADSET(-1),
+    SND_DEVICE_HEADSET_AND_SPEAKER(-1),
+    SND_DEVICE_FM_SPEAKER(-1),
+    SND_DEVICE_BT_EC_OFF(-1)
 {
 
-    int (*snd_get_num)() = NULL;
-    int (*snd_get_endpoint)(int, msm_snd_endpoint *) = NULL;
-#if 0 /* See comment bellow */
+    int (*snd_get_num)();
+    int (*snd_get_endpoint)(int, msm_snd_endpoint *);
     int (*set_acoustic_parameters)();
-#endif
 
     struct msm_snd_endpoint *ept;
 
@@ -113,16 +78,6 @@ AudioHardware::AudioHardware() :
         return;
     }
 
-#if 0	/* The function in the original libhtc_acoustic parse the parameters
-		 * from csv files and write the params in the shared memory.
-		 * We can't use it because our AMSS does not work the same way.
-		 * Plus, it's won't be used as the htc-acoustic device required in 
-		 * the kernel is disabled (to avoid the original parameters to be screwed).
-		 * Our AMSS need only the current audio parameters to be written in
-		 * shared memory at a fixed offset.
-		 * The "custom" libhtc_acoustic will do this for us, with the help
-		 * of a new htc-acousctic_wince device
-		 */
     set_acoustic_parameters = (int (*)(void))::dlsym(acoustic, "set_acoustic_parameters");
     if ((*set_acoustic_parameters) == 0 ) {
         LOGE("Could not open set_acoustic_parameters()");
@@ -134,108 +89,49 @@ AudioHardware::AudioHardware() :
         LOGE("Could not set acoustic parameters to share memory: %d", rc);
 //        return;
     }
-#endif
-
-	htc_acoustic_init = (int (*)(void))::dlsym(acoustic, "htc_acoustic_init");
-    if ((*htc_acoustic_init) == 0 ) {
-        LOGE("Could not link htc_acoustic_init()");
-    }
-
-    /* If acoustic init was ok, then continue linking other functions
-     * otherwise, don't link them so that the rest of the hardware
-     * can still work
-     */
-    if ( (htc_acoustic_init) && ( htc_acoustic_init() != 0) ) {
-        LOGE("Failed to initialize htc acoutic system. Using basic hardware.");
-    } else {
-        mAcousticInit = true;
-        htc_acoustic_deinit = (int (*)(void))::dlsym(acoustic, "htc_acoustic_deinit");
-        if ((*htc_acoustic_deinit) == 0 ) {
-            LOGE("Could not link htc_acoustic_deinit()");
-        }
-
-        msm72xx_set_acoustic_table = (int (*)(int, int))::dlsym(acoustic, "msm72xx_set_acoustic_table");
-        if ((*msm72xx_set_acoustic_table) == 0 ) {
-            LOGE("Could not link msm72xx_set_acoustic_table()");
-        }
-
-        msm72xx_set_acoustic_done = (int (*)(void))::dlsym(acoustic, "msm72xx_set_acoustic_done");
-        if ((*msm72xx_set_acoustic_done) == 0 ) {
-            LOGE("Could not link msm72xx_set_acoustic_done()");
-        }
-
-        msm72xx_set_audio_path = (int (*)(bool, bool, int, bool))::dlsym(acoustic, "msm72xx_set_audio_path");
-        if ((*msm72xx_set_audio_path) == 0 ) {
-            LOGE("Could not link msm72xx_set_audio_path()");
-        }
-
-        msm72xx_update_audio_method = (int (*)(int))::dlsym(acoustic, "msm72xx_update_audio_method");
-        if ((*msm72xx_update_audio_method) == 0 ) {
-            LOGE("Could not link msm72xx_update_audio_method()");
-        }
-
-        msm72xx_get_bluetooth_hs_id =(int (*)(const char*))::dlsym(acoustic, "msm72xx_get_bluetooth_hs_id");
-        if ((*msm72xx_get_bluetooth_hs_id) == 0 ) {
-            LOGE("Could not link msm72xx_get_bluetooth_hs_id()");
-        }
-	}
 
     snd_get_num = (int (*)(void))::dlsym(acoustic, "snd_get_num_endpoints");
     if ((*snd_get_num) == 0 ) {
-        LOGE("Could not link snd_get_num()");
+        LOGE("Could not open snd_get_num()");
+//        return;
     }
 
+    mNumSndEndpoints = snd_get_num();
+    LOGD("mNumSndEndpoints = %d", mNumSndEndpoints);
+    mSndEndpoints = new msm_snd_endpoint[mNumSndEndpoints];
+    mInit = true;
+    LOGV("constructed %d SND endpoints)", mNumSndEndpoints);
+    ept = mSndEndpoints;
     snd_get_endpoint = (int (*)(int, msm_snd_endpoint *))::dlsym(acoustic, "snd_get_endpoint");
     if ((*snd_get_endpoint) == 0 ) {
-        LOGE("Could not link snd_get_endpoint()");
+        LOGE("Could not open snd_get_endpoint()");
+        return;
     }
 
-    if ( snd_get_num != NULL ) {
-        mNumSndEndpoints = snd_get_num();
-        LOGD("mNumSndEndpoints = %d", mNumSndEndpoints);
-        mSndEndpoints = new msm_snd_endpoint[mNumSndEndpoints];
-        mInit = true;
-        LOGV("constructed %d SND endpoints", mNumSndEndpoints);
-        ept = mSndEndpoints;
-        if ( snd_get_endpoint != NULL ) {
-            for (int cnt = 0; cnt < mNumSndEndpoints; cnt++, ept++) {
-                ept->id = cnt;
-                snd_get_endpoint(cnt, ept);
-                LOGV("cnt = %d ept->name = %s ept->id = %d\n", cnt, ept->name, ept->id);
+    for (int cnt = 0; cnt < mNumSndEndpoints; cnt++, ept++) {
+        ept->id = cnt;
+        snd_get_endpoint(cnt, ept);
 #define CHECK_FOR(desc) \
-                if (!strcmp(ept->name, #desc)) { \
-                    SND_DEVICE_##desc = ept->id; \
-                } else
-                CHECK_FOR(CURRENT)
-                CHECK_FOR(HANDSET)
-                CHECK_FOR(SPEAKER)
-                CHECK_FOR(BT)
-                CHECK_FOR(BT_EC_OFF)
-                CHECK_FOR(HEADSET)
-                CHECK_FOR(CARKIT)
-                CHECK_FOR(TTY_FULL)
-                CHECK_FOR(TTY_VCO)
-                CHECK_FOR(TTY_HCO)
-                CHECK_FOR(NO_MIC_HEADSET)
-                CHECK_FOR(FM_HEADSET)
-                CHECK_FOR(FM_SPEAKER)
-                CHECK_FOR(HEADSET_AND_SPEAKER)
-                CHECK_FOR(IDLE) {}
+        if (!strcmp(ept->name, #desc)) { \
+            SND_DEVICE_##desc = ept->id; \
+            LOGD("BT MATCH " #desc); \
+        } else
+        CHECK_FOR(CURRENT)
+        CHECK_FOR(HANDSET)
+        CHECK_FOR(SPEAKER)
+        CHECK_FOR(BT)
+        CHECK_FOR(BT_EC_OFF)
+        CHECK_FOR(HEADSET)
+        CHECK_FOR(CARKIT)
+        CHECK_FOR(TTY_FULL)
+        CHECK_FOR(TTY_VCO)
+        CHECK_FOR(TTY_HCO)
+        CHECK_FOR(NO_MIC_HEADSET)
+        CHECK_FOR(FM_HEADSET)
+        CHECK_FOR(FM_SPEAKER)
+        CHECK_FOR(HEADSET_AND_SPEAKER) {}
 #undef CHECK_FOR
-            }
-        }
-    } else {
-        mNumSndEndpoints = 4;
-        LOGV("constructed %d default SND endpoints", mNumSndEndpoints);
-        mInit = true;
     }
-
-    if ( SND_DEVICE_IDLE != -1 ) { 
-        mCurSndDevice = SND_DEVICE_IDLE;
-    }
-    reset_remote_audio();
-
-    LOGV("AudioHardware::AudioHardware Initialized\n");
 }
 
 AudioHardware::~AudioHardware()
@@ -246,12 +142,6 @@ AudioHardware::~AudioHardware()
     mInputs.clear();
     closeOutputStream((AudioStreamOut*)mOutput);
     delete [] mSndEndpoints;
-
-    /* In case we could initialize new acoustic library, then deinit to free memory */
-    if ( (htc_acoustic_deinit != NULL) && mAcousticInit ) {
-        htc_acoustic_deinit();
-    }
-
     if (acoustic) {
         ::dlclose(acoustic);
         acoustic = 0;
@@ -415,15 +305,11 @@ status_t AudioHardware::setParameters(const String8& keyValuePairs)
     key = String8(BT_NAME_KEY);
     if (param.get(key, value) == NO_ERROR) {
         mBluetoothId = 0;
-        if ( mAcousticInit ) {
-            mBluetoothId = msm72xx_get_bluetooth_hs_id(value.string());
-        } else {
-            for (int i = 0; i < mNumSndEndpoints; i++) {
-                if (!strcasecmp(value.string(), mSndEndpoints[i].name)) {
-                    mBluetoothId = mSndEndpoints[i].id;
-                    LOGI("Using custom acoustic parameters for %s", value.string());
-                    break;
-                }
+        for (int i = 0; i < mNumSndEndpoints; i++) {
+            if (!strcasecmp(value.string(), mSndEndpoints[i].name)) {
+                mBluetoothId = mSndEndpoints[i].id;
+                LOGI("Using custom acoustic parameters for %s", value.string());
+                break;
             }
         }
         if (mBluetoothId == 0) {
@@ -501,14 +387,10 @@ static status_t set_volume_rpc(uint32_t device,
      args.method = method;
      args.volume = volume;
 
-     if ( mAcousticInit ) {
-        update_volume(&args, fd);
-     } else {
-         if (ioctl(fd, SND_SET_VOLUME, &args) < 0) {
-             LOGE("snd_set_volume error.");
-             close(fd);
-             return -EIO;
-         }
+     if (ioctl(fd, SND_SET_VOLUME, &args) < 0) {
+         LOGE("snd_set_volume error.");
+         close(fd);
+         return -EIO;
      }
      close(fd);
      return NO_ERROR;
@@ -550,214 +432,7 @@ status_t AudioHardware::setMasterVolume(float v)
     return -1;
 }
 
-static int get_master_volume(void) 
-{
-    float volume;
-    AudioSystem::getMasterVolume(&volume);
-    volume = ceil(volume * 5.0);
-    return volume;
-}
-
-static int reset_remote_audio(void) 
-{
-    /* Reset remote audio (winmo call this on first snd_set_volume call) */
-    if ( SND_DEVICE_IDLE != -1) {
-        LOGV("Resetting remote audio");
-        set_volume_rpc(SND_DEVICE_IDLE, 1, 5);
-    } else {
-        LOGE("Can't reset modem audio, SND_DEVICE_IDLE not defined");
-        return -EIO;
-    }
-    return NO_ERROR;
-}
-
-/* This function will be called on device change to sets up the volume 
- * on the new device and to update the audio settings accordling to the
- * new device and new volume
- */
-status_t AudioHardware::update_volume_new_device(uint32_t inputDevice)
-{
-    /* Update volume in case of device change */
-    int volume = get_master_volume();
-
-    LOGV("AudioHardware::update_volume_new_device %d", mCurSndDevice);
-    
-    /* When in call, use the METHOD_VOICE to set the volume */
-    if ( mMode == AudioSystem::MODE_IN_CALL ) {
-        set_volume_rpc(mCurSndDevice, SND_METHOD_VOICE, volume);
-    /* If recording sound via internal mics, use METHOD_AUDIO */
-    } else if ( (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
-                (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) ) {
-        set_volume_rpc(SND_DEVICE_REC_INC_MIC, SND_METHOD_AUDIO, volume);
-    /* All other cases */
-    } else {
-        set_volume_rpc(mCurSndDevice, mMode != AudioSystem::MODE_IN_CALL, volume);
-    }  
-
-    /* Tell the audio acoustic controller that we have processed the new settings */
-    if ( msm72xx_set_acoustic_done != NULL ) {
-        msm72xx_set_acoustic_done();
-    }
-
-    return NO_ERROR;
-}
-
-/* This function will be called when volume change is done. It will apply new
- * parameters in tables and manage the method used for audio volume control
- */
-static status_t update_volume(struct msm_snd_volume_config* args,
-                                      uint32_t fd)
-{
-    int device_method = SND_METHOD_NONE;
-    int device = args->device;
-
-    LOGV("update_volume %d %d %d", args->device, args->method, args->volume);
-
-    if ( device != SND_DEVICE_IDLE ) {
-         if ( msm72xx_set_acoustic_table != NULL ) {
-             device_method = msm72xx_set_acoustic_table(device, args->volume);
-         }
-
-         /* Some devices do not require/support volume setting */
-         if ( device_method != SND_METHOD_NONE ) {
-             /* Some devices only accept volume level 5 */
-             if ( device_method == SND_METHOD_AUDIO ) {
-                LOGV("call snd_set_volume audio 5");
-                args->device = SND_DEVICE_IDLE;
-                args->method = SND_METHOD_AUDIO;
-                args->volume = 5;
-             } else {
-                LOGV("call snd_set_volume voice %d", args->volume);
-            }
-
-             if (ioctl(fd, SND_SET_VOLUME, args) < 0) {
-                 LOGE("snd_set_volume error.");
-                 close(fd);
-                 return -EIO;
-             }
-         }
-    } else {
-         if (ioctl(fd, SND_SET_VOLUME, args) < 0) {
-             LOGE("snd_set_volume error.");
-             close(fd);
-             return -EIO;
-         }
-    }
-
-    return NO_ERROR;
-}
-
-/* This function will be called on device change, so that hardware and software changes
- * will be done by the new acoustic library. It will enable outputs, set new tables,
- * handle special modes (like music playback, enable mic while recording), ...
- */
-status_t AudioHardware::update_device(struct msm_snd_device_config* args,
-                                      uint32_t fd)
-{
-    LOGV("AudioHardware::update_device %d", args->device);
-
-    /* Close /dev/msm_snd because set_volume_rpc will open it */
-    close(fd);
-    /* If the current device is speaker, then lower the volume before 
-     * switching to the new device.
-     * On some device, it can cause power collapse if speaker is not powered off
-     * (i.e : on diamond)
-     */
-    if ( mCurSndDevice != SND_DEVICE_IDLE ) {
-        set_volume_rpc(SND_DEVICE_CURRENT, mMode != AudioSystem::MODE_IN_CALL, 0);
-    }
-
-    /* Microphone should be un-muted when recording or during voice call */
-    AudioStreamInMSM72xx *input = getActiveInput_l();
-    if ( input == NULL ) 
-    {
-        /* To be removed if the "send_mic_mute_to_AudioManager" param is set
-         * to true in the phone app config file (/packages/apps/Phone/res/values/config.xml)
-         */
-        if ( mMode != AudioSystem::MODE_IN_CALL ) {
-            args->mic_mute = true;  
-        } else {
-            args->mic_mute = false;
-        }
-    } else {
-        uint32_t inputDevice = input->devices();
-        if ( (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
-             (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) ) {
-            args->mic_mute = false;  
-        } else {
-            args->mic_mute = true;
-        }
-    }
-
-    if ( msm72xx_set_audio_path != NULL ) {
-        bool bEnableOut = false;
-        /* XXX: Can't be used. @ boot time, isStreamActive blocks media service.
-        bool bMusic;
-        AudioSystem::isStreamActive(AudioSystem::MUSIC, &bMusic);*/
-        if ( (mMode == AudioSystem::MODE_IN_CALL) || (bCurrentOutStream != AudioSystem::DEFAULT) ) {
-            bEnableOut = true;    
-        }
-        msm72xx_set_audio_path(!args->mic_mute, 0, args->device, bEnableOut );
-    }
-
-
-    // TODO : switch on/off leds as done in msm_setup_audio() ? 
-    if ( msm72xx_set_acoustic_table != NULL ) {
-        msm72xx_set_acoustic_table(args->device, get_master_volume());
-    }
-
-    /* Redirect output to correct device for specials devices */
-    if ( (int)args->device == SND_DEVICE_PLAYBACK_HANDSFREE ) {
-        args->device = SND_DEVICE_SPEAKER;
-    } else if ( (int)args->device == SND_DEVICE_PLAYBACK_HEADSET ) {
-        args->device = SND_DEVICE_HEADSET;
-    } else if ( (int)args->device >= BT_CUSTOM_DEVICES_ID_OFFSET ) {
-        args->device = SND_DEVICE_BT;
-    }
- 
-    /* Do not use SND_DEVICE_CURRENT */
-    if ( args->device == SND_DEVICE_CURRENT ) {
-        args->device = mCurSndDevice;
-    }
-
-    LOGV("call snd_set_device %d", args->device);
-
-    /* Re-open msm_snd to set device */
-    fd = open("/dev/msm_snd", O_RDWR);
-    if (fd < 0) {
-        LOGE("Can not open snd device");
-        return -EPERM;
-    }
-
-    if (ioctl(fd, SND_SET_DEVICE, args) < 0) {
-        LOGE("snd_set_device error.");
-        close(fd);
-        return -EIO;
-    }
-
-    if ( msm72xx_set_acoustic_done != NULL ) {
-        msm72xx_set_acoustic_done();
-    }
-    return NO_ERROR;
-}
-
-static int getCurrentStream(void) 
-{
-    bool bStreamIsActive;
-    int stream;
-    
-    for (stream = AudioSystem::VOICE_CALL; stream<AudioSystem::NUM_STREAM_TYPES; stream++) {
-        AudioSystem::isStreamActive(stream, &bStreamIsActive);
-        //LOGV("Stream %d status : %d", stream, bStreamIsActive);
-        if ( bStreamIsActive ) {
-            return stream;
-        }
-    }
-
-    return AudioSystem::DEFAULT;
-}
-
-status_t AudioHardware::do_route_audio_rpc(uint32_t device,
+static status_t do_route_audio_rpc(uint32_t device,
                                    bool ear_mute, bool mic_mute)
 {
     if (device == -1UL)
@@ -788,14 +463,10 @@ status_t AudioHardware::do_route_audio_rpc(uint32_t device,
     args.ear_mute = ear_mute ? SND_MUTE_MUTED : SND_MUTE_UNMUTED;
     args.mic_mute = mic_mute ? SND_MUTE_MUTED : SND_MUTE_UNMUTED;
 
-    if ( mAcousticInit ) {
-       update_device(&args, fd);
-    } else {
-        if (ioctl(fd, SND_SET_DEVICE, &args) < 0) {
-            LOGE("snd_set_device error.");
-            close(fd);
-            return -EIO;
-        }
+    if (ioctl(fd, SND_SET_DEVICE, &args) < 0) {
+        LOGE("snd_set_device error.");
+        close(fd);
+        return -EIO;
     }
 
     close(fd);
@@ -833,21 +504,9 @@ status_t AudioHardware::doRouting()
     uint32_t inputDevice = (input == NULL) ? 0 : input->devices();
     int sndDevice = -1;
 
-    // Ignore routing device information when we start a recording in voice
-    // call. Recording will happen through currently active tx device
-    if(inputDevice == AudioSystem::DEVICE_IN_VOICE_CALL)
-        return NO_ERROR;
     if (inputDevice != 0) {
         LOGI("do input routing device %x\n", inputDevice);
- 
-        /* Audio recording seems to need some special tweaks to work when used with speakerphone
-         * so default to headset to make it work
-         */
-        if ( (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
-             (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) ) {
-            LOGI("Routing audio to Headset\n");
-            sndDevice = SND_DEVICE_HANDSET;
-        } else if (inputDevice & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
+        if (inputDevice & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
             LOGI("Routing audio to Bluetooth PCM\n");
             sndDevice = SND_DEVICE_BT;
         } else if (inputDevice & AudioSystem::DEVICE_IN_WIRED_HEADSET) {
@@ -923,9 +582,6 @@ status_t AudioHardware::doRouting()
             msm72xx_enable_audpp(audProcess);
         }
         mCurSndDevice = sndDevice;
-
-        /* Update the acoustic hardware with new device settings */
-        update_volume_new_device(sndDevice);
     }
 
     return ret;
@@ -1041,8 +697,6 @@ status_t AudioHardware::AudioStreamOutMSM72xx::set(
 
 AudioHardware::AudioStreamOutMSM72xx::~AudioStreamOutMSM72xx()
 {
-    bCurrentOutStream = AudioSystem::DEFAULT;
-    mHardware->doAudioRouteOrMute(SND_DEVICE_CURRENT);
     if (mFd >= 0) close(mFd);
 }
 
@@ -1111,27 +765,12 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
     if (mStartCount) {
         if (--mStartCount == 0) {
             ioctl(mFd, AUDIO_START, 0);
-     
-            if ( mAcousticInit ) {
-                /* Sets up acoustic hardware */
-                bCurrentOutStream = getCurrentStream();
-                if ( mHardware->mCurSndDevice == SND_DEVICE_SPEAKER ) {
-                    mHardware->doAudioRouteOrMute(SND_DEVICE_PLAYBACK_HANDSFREE);
-                } else if ( mHardware->mCurSndDevice == SND_DEVICE_HEADSET ) {
-                    mHardware->doAudioRouteOrMute(SND_DEVICE_PLAYBACK_HEADSET);
-                } else {
-                    /* Let the device be choosen by actual settings */
-                    mHardware->doRouting();
-                }
-            }
         }
     }
     return bytes;
 
 Error:
     if (mFd >= 0) {
-        bCurrentOutStream = AudioSystem::DEFAULT;
-        mHardware->doAudioRouteOrMute(SND_DEVICE_CURRENT);
         ::close(mFd);
         mFd = -1;
     }
@@ -1145,8 +784,6 @@ status_t AudioHardware::AudioStreamOutMSM72xx::standby()
 {
     status_t status = NO_ERROR;
     if (!mStandby && mFd >= 0) {
-        bCurrentOutStream = AudioSystem::DEFAULT;
-        mHardware->doAudioRouteOrMute(SND_DEVICE_CURRENT);
         ::close(mFd);
         mFd = -1;
     }
@@ -1340,20 +977,16 @@ status_t AudioHardware::AudioStreamInMSM72xx::set(
      */
     int (*msm72xx_set_audpre_params)(int, int);
     msm72xx_set_audpre_params = (int (*)(int, int))::dlsym(acoustic, "msm72xx_set_audpre_params");
-    if ( msm72xx_set_audpre_params != NULL ) {
-        status = msm72xx_set_audpre_params(audpre_index, tx_iir_index);
-        if (status < 0)
-            LOGE("Cannot set audpre parameters");
-    }
+    status = msm72xx_set_audpre_params(audpre_index, tx_iir_index);
+    if (status < 0)
+        LOGE("Cannot set audpre parameters");
 
     int (*msm72xx_enable_audpre)(int, int, int);
     msm72xx_enable_audpre = (int (*)(int, int, int))::dlsym(acoustic, "msm72xx_enable_audpre");
     mAcoustics = acoustic_flags;
-    if ( msm72xx_enable_audpre != NULL ) {
-        status = msm72xx_enable_audpre((int)acoustic_flags, audpre_index, tx_iir_index);
-        if (status < 0)
-            LOGE("Cannot enable audpre");
-    }
+    status = msm72xx_enable_audpre((int)acoustic_flags, audpre_index, tx_iir_index);
+    if (status < 0)
+        LOGE("Cannot enable audpre");
 
     return NO_ERROR;
 
