@@ -511,6 +511,9 @@ static status_t doAcousticVolumeUpdate(struct msm_snd_volume_config* args,
                 LOGV("call snd_set_volume voice %d", args->volume);
             }
 
+#if LOG_SND_RPC
+             LOGD("rpc snd_set_volume(%d, %d, %d)\n", args->device, args->method, args->volume);
+#endif
              if (ioctl(fd, SND_SET_VOLUME, args) < 0) {
                  LOGE("snd_set_volume error.");
                  close(fd);
@@ -518,6 +521,9 @@ static status_t doAcousticVolumeUpdate(struct msm_snd_volume_config* args,
              }
          }
     } else {
+#if LOG_SND_RPC
+         LOGD("rpc snd_set_volume(%d, %d, %d)\n", args->device, args->method, args->volume);
+#endif
          if (ioctl(fd, SND_SET_VOLUME, args) < 0) {
              LOGE("snd_set_volume error.");
              close(fd);
@@ -722,6 +728,9 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
         return -EPERM;
     }
 
+#if LOG_SND_RPC
+    LOGD("rpc snd_set_device(%d, %d, %d)\n", args->device, args->ear_mute, args->mic_mute);
+#endif
     if (ioctl(fd, SND_SET_DEVICE, args) < 0) {
         LOGE("snd_set_device error.");
         close(fd);
