@@ -27,6 +27,9 @@
 
 extern "C" {
 #include <linux/msm_audio.h>
+
+#define SND_METHOD_NONE     -1
+#define SND_METHOD_AUDIO    1
 }
 
 namespace android {
@@ -109,6 +112,7 @@ public:
 
     virtual status_t    setVoiceVolume(float volume);
     virtual status_t    setMasterVolume(float volume);
+    virtual status_t    doUpdateVolume(uint32_t inputDevice);
 
     virtual status_t    setMode(int mode);
 

@@ -477,13 +477,61 @@ size_t AudioHardware::getInputBufferSize(uint32_t sampleRate, int format, int ch
     return 2048*channelCount;
 }
 
+/* This function will be called when volume change is done. It will apply new
+ * parameters in tables and manage the method used for audio volume control
+ */
+static status_t doAcousticVolumeUpdate(struct msm_snd_volume_config* args,
+                                      uint32_t fd)
+{
+    int device_method = SND_METHOD_NONE;
+    int device = args->device;
+
+    LOGV("doAcousticVolumeUpdate %d %d %d", args->device, args->method, args->volume);
+
+    if ( device != SND_DEVICE_IDLE ) {
+         if ( msm72xx_set_acoustic_table != NULL ) {
+             device_method = msm72xx_set_acoustic_table(device, args->volume);
+         }
+
+         /* Some devices do not require/support volume setting */
+         if ( device_method != SND_METHOD_NONE ) {
+             /* Some devices only accept volume level 5 */
+             if ( device_method == SND_METHOD_AUDIO ) {
+                LOGV("call snd_set_volume audio 5");
+                args->device = SND_DEVICE_IDLE;
+                args->method = SND_METHOD_AUDIO;
+                args->volume = 5;
+             } else {
+                LOGV("call snd_set_volume voice %d", args->volume);
+            }
+
+             if (ioctl(fd, SND_SET_VOLUME, args) < 0) {
+                 LOGE("snd_set_volume error.");
+                 close(fd);
+                 return -EIO;
+             }
+         }
+    } else {
+         if (ioctl(fd, SND_SET_VOLUME, args) < 0) {
+             LOGE("snd_set_volume error.");
+             close(fd);
+             return -EIO;
+         }
+    }
+
+    return NO_ERROR;
+}
+
 static status_t set_volume_rpc(uint32_t device,
                                uint32_t method,
                                uint32_t volume)
 {
     int fd;
 #if LOG_SND_RPC
-    LOGD("rpc_snd_set_volume(%d, %d, %d)\n", device, method, volume);
+    /* If acoustic library is used, debug will be done in doAcousticVolumeUpdate */
+    if ( !mUseAcoustic ) {
+        LOGD("rpc_snd_set_volume(%d, %d, %d)\n", device, method, volume);
+    }
 #endif
 
     if (device == -1UL) return NO_ERROR;
@@ -507,10 +555,14 @@ static status_t set_volume_rpc(uint32_t device,
      args.method = method;
      args.volume = volume;
 
-     if (ioctl(fd, SND_SET_VOLUME, &args) < 0) {
-         LOGE("snd_set_volume error.");
-         close(fd);
-         return -EIO;
+     if ( mUseAcoustic ) {
+        doAcousticVolumeUpdate(&args, fd);
+     } else {
+         if (ioctl(fd, SND_SET_VOLUME, &args) < 0) {
+             LOGE("snd_set_volume error.");
+             close(fd);
+             return -EIO;
+         }
      }
      close(fd);
      return NO_ERROR;
