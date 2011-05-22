@@ -427,11 +427,15 @@ status_t AudioHardware::setParameters(const String8& keyValuePairs)
     key = String8(BT_NAME_KEY);
     if (param.get(key, value) == NO_ERROR) {
         mBluetoothId = 0;
-        for (int i = 0; i < mNumSndEndpoints; i++) {
-            if (!strcasecmp(value.string(), mSndEndpoints[i].name)) {
-                mBluetoothId = mSndEndpoints[i].id;
-                LOGI("Using custom acoustic parameters for %s", value.string());
-                break;
+        if ( mUseAcoustic ) {
+            mBluetoothId = msm72xx_get_bluetooth_hs_id(value.string());
+        } else {
+            for (int i = 0; i < mNumSndEndpoints; i++) {
+                if (!strcasecmp(value.string(), mSndEndpoints[i].name)) {
+                    mBluetoothId = mSndEndpoints[i].id;
+                    LOGI("Using custom acoustic parameters for %s", value.string());
+                    break;
+                }
             }
         }
         if (mBluetoothId == 0) {
