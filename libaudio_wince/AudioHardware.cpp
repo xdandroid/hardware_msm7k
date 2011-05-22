@@ -17,7 +17,7 @@
 #include <math.h>
 
 //#define LOG_NDEBUG 0
-#define LOG_TAG "AudioHardwareMSM72XX"
+#define LOG_TAG "AudioHardwareMSM72XX_wince"
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -63,9 +63,11 @@ AudioHardware::AudioHardware() :
     SND_DEVICE_BT_EC_OFF(-1)
 {
 
-    int (*snd_get_num)();
-    int (*snd_get_endpoint)(int, msm_snd_endpoint *);
+    int (*snd_get_num)() = NULL;
+    int (*snd_get_endpoint)(int, msm_snd_endpoint *) = NULL;
+#if 0 /* See comment bellow */
     int (*set_acoustic_parameters)();
+#endif
 
     struct msm_snd_endpoint *ept;
 
@@ -78,6 +80,16 @@ AudioHardware::AudioHardware() :
         return;
     }
 
+#if 0	/* The function in the original libhtc_acoustic parse the parameters
+		 * from csv files and write the params in the shared memory.
+		 * We can't use it because our AMSS does not work the same way.
+		 * Plus, it won't be used as the htc-acoustic device required in 
+		 * the kernel is disabled (to avoid the original parameters to be screwed).
+		 * Our AMSS need only the current audio parameters to be written in
+		 * shared memory at a fixed offset.
+		 * The "custom" libhtc_acoustic will do this for us, with the help
+		 * of a new htc-acousctic_wince device
+		 */
     set_acoustic_parameters = (int (*)(void))::dlsym(acoustic, "set_acoustic_parameters");
     if ((*set_acoustic_parameters) == 0 ) {
         LOGE("Could not open set_acoustic_parameters()");
@@ -89,48 +101,56 @@ AudioHardware::AudioHardware() :
         LOGE("Could not set acoustic parameters to share memory: %d", rc);
 //        return;
     }
+#endif
 
     snd_get_num = (int (*)(void))::dlsym(acoustic, "snd_get_num_endpoints");
     if ((*snd_get_num) == 0 ) {
-        LOGE("Could not open snd_get_num()");
-//        return;
+        LOGE("Could not link snd_get_num()");
     }
 
-    mNumSndEndpoints = snd_get_num();
-    LOGD("mNumSndEndpoints = %d", mNumSndEndpoints);
-    mSndEndpoints = new msm_snd_endpoint[mNumSndEndpoints];
-    mInit = true;
-    LOGV("constructed %d SND endpoints)", mNumSndEndpoints);
-    ept = mSndEndpoints;
     snd_get_endpoint = (int (*)(int, msm_snd_endpoint *))::dlsym(acoustic, "snd_get_endpoint");
     if ((*snd_get_endpoint) == 0 ) {
-        LOGE("Could not open snd_get_endpoint()");
+        LOGE("Could not link snd_get_endpoint()");
         return;
     }
 
-    for (int cnt = 0; cnt < mNumSndEndpoints; cnt++, ept++) {
-        ept->id = cnt;
-        snd_get_endpoint(cnt, ept);
+    if ( snd_get_num != NULL ) {
+        mNumSndEndpoints = snd_get_num();
+        LOGD("mNumSndEndpoints = %d", mNumSndEndpoints);
+        mSndEndpoints = new msm_snd_endpoint[mNumSndEndpoints];
+        mInit = true;
+        LOGV("constructed %d SND endpoints", mNumSndEndpoints);
+        ept = mSndEndpoints;
+        if ( snd_get_endpoint != NULL ) {
+            for (int cnt = 0; cnt < mNumSndEndpoints; cnt++, ept++) {
+                ept->id = cnt;
+                snd_get_endpoint(cnt, ept);
+                LOGV("cnt = %d ept->name = %s ept->id = %d\n", cnt, ept->name, ept->id);
 #define CHECK_FOR(desc) \
-        if (!strcmp(ept->name, #desc)) { \
-            SND_DEVICE_##desc = ept->id; \
-            LOGD("BT MATCH " #desc); \
-        } else
-        CHECK_FOR(CURRENT)
-        CHECK_FOR(HANDSET)
-        CHECK_FOR(SPEAKER)
-        CHECK_FOR(BT)
-        CHECK_FOR(BT_EC_OFF)
-        CHECK_FOR(HEADSET)
-        CHECK_FOR(CARKIT)
-        CHECK_FOR(TTY_FULL)
-        CHECK_FOR(TTY_VCO)
-        CHECK_FOR(TTY_HCO)
-        CHECK_FOR(NO_MIC_HEADSET)
-        CHECK_FOR(FM_HEADSET)
-        CHECK_FOR(FM_SPEAKER)
-        CHECK_FOR(HEADSET_AND_SPEAKER) {}
+                if (!strcmp(ept->name, #desc)) { \
+                    SND_DEVICE_##desc = ept->id; \
+                } else
+                CHECK_FOR(CURRENT)
+                CHECK_FOR(HANDSET)
+                CHECK_FOR(SPEAKER)
+                CHECK_FOR(BT)
+                CHECK_FOR(BT_EC_OFF)
+                CHECK_FOR(HEADSET)
+                CHECK_FOR(CARKIT)
+                CHECK_FOR(TTY_FULL)
+                CHECK_FOR(TTY_VCO)
+                CHECK_FOR(TTY_HCO)
+                CHECK_FOR(NO_MIC_HEADSET)
+                CHECK_FOR(FM_HEADSET)
+                CHECK_FOR(FM_SPEAKER)
+                CHECK_FOR(HEADSET_AND_SPEAKER) {}
 #undef CHECK_FOR
+            }
+        }
+    } else {
+        mNumSndEndpoints = 4;
+        LOGV("constructed %d default SND endpoints", mNumSndEndpoints);
+        mInit = true;
     }
 }
 
@@ -977,16 +997,20 @@ status_t AudioHardware::AudioStreamInMSM72xx::set(
      */
     int (*msm72xx_set_audpre_params)(int, int);
     msm72xx_set_audpre_params = (int (*)(int, int))::dlsym(acoustic, "msm72xx_set_audpre_params");
-    status = msm72xx_set_audpre_params(audpre_index, tx_iir_index);
-    if (status < 0)
-        LOGE("Cannot set audpre parameters");
+    if ( msm72xx_set_audpre_params != NULL ) {
+        status = msm72xx_set_audpre_params(audpre_index, tx_iir_index);
+        if (status < 0)
+            LOGE("Cannot set audpre parameters");
+    }
 
     int (*msm72xx_enable_audpre)(int, int, int);
     msm72xx_enable_audpre = (int (*)(int, int, int))::dlsym(acoustic, "msm72xx_enable_audpre");
     mAcoustics = acoustic_flags;
-    status = msm72xx_enable_audpre((int)acoustic_flags, audpre_index, tx_iir_index);
-    if (status < 0)
-        LOGE("Cannot enable audpre");
+    if ( msm72xx_enable_audpre != NULL ) {
+        status = msm72xx_enable_audpre((int)acoustic_flags, audpre_index, tx_iir_index);
+        if (status < 0)
+            LOGE("Cannot enable audpre");
+    }
 
     return NO_ERROR;
 
