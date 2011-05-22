@@ -44,6 +44,17 @@ const uint32_t AudioHardware::inputSamplingRates[] = {
 };
 
 /****************************************************************************
+ * Function prototypes for external libhtc-acoustic
+ ****************************************************************************/
+int (*htc_acoustic_init)(void);
+int (*htc_acoustic_deinit)(void);
+int (*msm72xx_set_acoustic_table)(int device, int volume);
+int (*msm72xx_set_acoustic_done)(void);
+int (*msm72xx_set_audio_path)(bool bEnableMic, bool bEnableDualMic, int device_out, bool bEnableOut);
+int (*msm72xx_update_audio_method)(int method);
+int (*msm72xx_get_bluetooth_hs_id)(const char* BT_Name);
+
+/****************************************************************************
  * Sound devices ids
  ****************************************************************************/
 /* Default device for backward compatibility if libhtc_acoustic is not found */
@@ -75,6 +86,7 @@ static int SND_DEVICE_REC_INC_MIC = 252;
 static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
 static int SND_DEVICE_PLAYBACK_HEADSET = 254;
 
+static bool mUseAcoustic = false;
 // ----------------------------------------------------------------------------
 
 AudioHardware::AudioHardware() :
@@ -121,6 +133,52 @@ AudioHardware::AudioHardware() :
 //        return;
     }
 #endif
+
+	htc_acoustic_init = (int (*)(void))::dlsym(acoustic, "htc_acoustic_init");
+    if ((*htc_acoustic_init) == 0 ) {
+        LOGE("Could not link htc_acoustic_init()");
+    }
+    
+    if ( htc_acoustic_init != 0 ) {
+        /* If acoustic init was ok, then continue linking other functions
+         * otherwise, don't link them so that the rest of the hardware
+         * can still work
+         */
+        if ( htc_acoustic_init() != 0 ) {
+            LOGE("Failed to initialize htc acoutic system. Using basic hardware.");
+        } else {
+            mUseAcoustic = true;
+            htc_acoustic_deinit = (int (*)(void))::dlsym(acoustic, "htc_acoustic_deinit");
+            if ((*htc_acoustic_deinit) == 0 ) {
+                LOGE("Could not link htc_acoustic_deinit()");
+            }
+
+            msm72xx_set_acoustic_table = (int (*)(int, int))::dlsym(acoustic, "msm72xx_set_acoustic_table");
+            if ((*msm72xx_set_acoustic_table) == 0 ) {
+                LOGE("Could not link msm72xx_set_acoustic_table()");
+            }
+
+            msm72xx_set_acoustic_done = (int (*)(void))::dlsym(acoustic, "msm72xx_set_acoustic_done");
+            if ((*msm72xx_set_acoustic_done) == 0 ) {
+                LOGE("Could not link msm72xx_set_acoustic_done()");
+            }
+
+            msm72xx_set_audio_path = (int (*)(bool, bool, int, bool))::dlsym(acoustic, "msm72xx_set_audio_path");
+            if ((*msm72xx_set_audio_path) == 0 ) {
+                LOGE("Could not link msm72xx_set_audio_path()");
+            }
+
+            msm72xx_update_audio_method = (int (*)(int))::dlsym(acoustic, "msm72xx_update_audio_method");
+            if ((*msm72xx_update_audio_method) == 0 ) {
+                LOGE("Could not link msm72xx_update_audio_method()");
+            }
+
+            msm72xx_get_bluetooth_hs_id =(int (*)(const char*))::dlsym(acoustic, "msm72xx_get_bluetooth_hs_id");
+            if ((*msm72xx_get_bluetooth_hs_id) == 0 ) {
+                LOGE("Could not link msm72xx_get_bluetooth_hs_id()");
+            }
+    	}
+	}	
 
     snd_get_num = (int (*)(void))::dlsym(acoustic, "snd_get_num_endpoints");
     if ((*snd_get_num) == 0 ) {
@@ -182,6 +240,12 @@ AudioHardware::~AudioHardware()
     mInputs.clear();
     closeOutputStream((AudioStreamOut*)mOutput);
     delete [] mSndEndpoints;
+
+    /* In case we could initialize new acoustic library, then deinit to free memory */
+    if ( (htc_acoustic_deinit != NULL) && mUseAcoustic ) {
+        htc_acoustic_deinit();
+    }
+
     if (acoustic) {
         ::dlclose(acoustic);
         acoustic = 0;
