@@ -93,6 +93,7 @@ static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
 static int SND_DEVICE_PLAYBACK_HEADSET = 254;
 
 static bool mUseAcoustic = false;
+static int bCurrentOutStream = AudioSystem::DEFAULT;
 
 // ----------------------------------------------------------------------------
 
@@ -635,7 +636,102 @@ status_t AudioHardware::doUpdateVolume(uint32_t inputDevice)
     return NO_ERROR;
 }
 
-static status_t do_route_audio_rpc(uint32_t device,
+/* This function will be called on device change, so that hardware and software changes
+ * will be done by the new acoustic library. It will enable outputs, set new tables,
+ * handle special modes (like music playback, enable mic while recording), ...
+ */
+status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config* args)
+{
+    int fd;
+
+    LOGV("AudioHardware::update_device %d %d %d", args->device, args->ear_mute, args->mic_mute);
+
+    /* If the current device is speaker, then lower the volume before 
+     * switching to the new device.
+     * On some device, it can cause power collapse if speaker is not powered off
+     * (i.e : on diamond)
+     */
+    if ( mCurSndDevice != SND_DEVICE_IDLE ) {
+        set_volume_rpc(SND_DEVICE_CURRENT, mMode != AudioSystem::MODE_IN_CALL, 0);
+    }
+
+    /* Microphone should be un-muted when recording or during voice call */
+    AudioStreamInMSM72xx *input = getActiveInput_l();
+    if ( input == NULL ) 
+    {
+        /* To be removed if the "send_mic_mute_to_AudioManager" param is set
+         * to true in the phone app config file (/packages/apps/Phone/res/values/config.xml)
+         */
+        if ( mMode != AudioSystem::MODE_IN_CALL ) {
+            args->mic_mute = true;  
+        } else {
+            args->mic_mute = false;
+        }
+    } else {
+        uint32_t inputDevice = input->devices();
+        if ( (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
+             (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) ) {
+            args->mic_mute = false;  
+        } else {
+            args->mic_mute = true;
+        }
+    }
+
+    if ( msm72xx_set_audio_path != NULL ) {
+        bool bEnableOut = false;
+        /* XXX: Can't be used. @ boot time, isStreamActive blocks media service.
+        bool bMusic;
+        AudioSystem::isStreamActive(AudioSystem::MUSIC, &bMusic);*/
+        if ( (mMode == AudioSystem::MODE_IN_CALL) || (bCurrentOutStream != AudioSystem::DEFAULT) ) {
+            bEnableOut = true;    
+        }
+        msm72xx_set_audio_path(!args->mic_mute, 0, args->device, bEnableOut );
+    }
+
+
+    // TODO : switch on/off leds as done in msm_setup_audio() ? 
+    if ( msm72xx_set_acoustic_table != NULL ) {
+        msm72xx_set_acoustic_table(args->device, get_master_volume());
+    }
+
+    /* Redirect output to correct device for specials devices */
+    if ( (int)args->device == SND_DEVICE_PLAYBACK_HANDSFREE ) {
+        args->device = SND_DEVICE_SPEAKER;
+    } else if ( (int)args->device == SND_DEVICE_PLAYBACK_HEADSET ) {
+        args->device = SND_DEVICE_HEADSET;
+    } else if ( (int)args->device >= BT_CUSTOM_DEVICES_ID_OFFSET ) {
+        args->device = SND_DEVICE_BT;
+    }
+ 
+    /* Do not use SND_DEVICE_CURRENT */
+    if ( args->device == (unsigned int)SND_DEVICE_CURRENT ) {
+        args->device = mCurSndDevice;
+    }
+
+    LOGV("call snd_set_device %d", args->device);
+
+    /* Open msm_snd to set device */
+    fd = open("/dev/msm_snd", O_RDWR);
+    if (fd < 0) {
+        LOGE("Can not open snd device");
+        return -EPERM;
+    }
+
+    if (ioctl(fd, SND_SET_DEVICE, args) < 0) {
+        LOGE("snd_set_device error.");
+        close(fd);
+        return -EIO;
+    }
+
+    if ( msm72xx_set_acoustic_done != NULL ) {
+        msm72xx_set_acoustic_done();
+    }
+
+    close(fd);
+    return NO_ERROR;
+}
+
+status_t AudioHardware::do_route_audio_rpc(uint32_t device,
                                    bool ear_mute, bool mic_mute)
 {
     if (device == -1UL)
@@ -643,13 +739,17 @@ static status_t do_route_audio_rpc(uint32_t device,
 
     int fd;
 #if LOG_SND_RPC
-    LOGD("rpc_snd_set_device(%d, %d, %d)\n", device, ear_mute, mic_mute);
+    if ( !mUseAcoustic ) {
+        LOGD("rpc_snd_set_device(%d, %d, %d)\n", device, ear_mute, mic_mute);
+    }
 #endif
 
-    fd = open("/dev/msm_snd", O_RDWR);
-    if (fd < 0) {
-        LOGE("Can not open snd device");
-        return -EPERM;
+    if ( !mUseAcoustic ) {
+        fd = open("/dev/msm_snd", O_RDWR);
+        if (fd < 0) {
+            LOGE("Can not open snd device");
+            return -EPERM;
+        }
     }
     // RPC call to switch audio path
     /* rpc_snd_set_device(
@@ -666,13 +766,17 @@ static status_t do_route_audio_rpc(uint32_t device,
     args.ear_mute = ear_mute ? SND_MUTE_MUTED : SND_MUTE_UNMUTED;
     args.mic_mute = mic_mute ? SND_MUTE_MUTED : SND_MUTE_UNMUTED;
 
-    if (ioctl(fd, SND_SET_DEVICE, &args) < 0) {
-        LOGE("snd_set_device error.");
+    if ( mUseAcoustic ) {
+       doAcousticAudioDeviceChange(&args);
+    } else {
+        if (ioctl(fd, SND_SET_DEVICE, &args) < 0) {
+            LOGE("snd_set_device error.");
+            close(fd);
+            return -EIO;
+        }
         close(fd);
-        return -EIO;
     }
 
-    close(fd);
     return NO_ERROR;
 }
 
