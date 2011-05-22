@@ -812,9 +812,21 @@ status_t AudioHardware::doRouting()
     uint32_t inputDevice = (input == NULL) ? 0 : input->devices();
     int sndDevice = -1;
 
+    // Ignore routing device information when we start recording in voice
+    // call. Recording will happen through currently active tx device
+    if(inputDevice == AudioSystem::DEVICE_IN_VOICE_CALL)
+        return NO_ERROR;
     if (inputDevice != 0) {
         LOGI("do input routing device %x\n", inputDevice);
-        if (inputDevice & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
+ 
+        /* Audio recording seems to need some special tweaks to work when used with speakerphone
+         * so default to headset to make it work
+         */
+        if ( (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
+             (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) ) {
+            LOGI("Routing audio to Headset\n");
+            sndDevice = SND_DEVICE_HANDSET;
+        } else if (inputDevice & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
             LOGI("Routing audio to Bluetooth PCM\n");
             sndDevice = SND_DEVICE_BT;
         } else if (inputDevice & AudioSystem::DEVICE_IN_WIRED_HEADSET) {
