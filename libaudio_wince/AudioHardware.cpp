@@ -55,6 +55,11 @@ int (*msm72xx_update_audio_method)(int method);
 int (*msm72xx_get_bluetooth_hs_id)(const char* BT_Name);
 
 /****************************************************************************
+ * Local Function prototypes
+ ****************************************************************************/
+static int set_initial_audio_volume(void);
+
+/****************************************************************************
  * Sound devices ids
  ****************************************************************************/
 /* Default device for backward compatibility if libhtc_acoustic is not found */
@@ -87,6 +92,7 @@ static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
 static int SND_DEVICE_PLAYBACK_HEADSET = 254;
 
 static bool mUseAcoustic = false;
+
 // ----------------------------------------------------------------------------
 
 AudioHardware::AudioHardware() :
@@ -230,6 +236,15 @@ AudioHardware::AudioHardware() :
         LOGV("constructed %d default SND endpoints", mNumSndEndpoints);
         mInit = true;
     }
+
+    if ( mUseAcoustic ) {
+        if ( SND_DEVICE_IDLE != -1 ) { 
+            mCurSndDevice = SND_DEVICE_IDLE;
+        }
+        set_initial_audio_volume();
+    }
+
+    LOGV("AudioHardware::AudioHardware Initialized\n");
 }
 
 AudioHardware::~AudioHardware()
@@ -1239,6 +1254,22 @@ String8 AudioHardware::AudioStreamInMSM72xx::getParameters(const String8& keys)
 
 extern "C" AudioHardwareInterface* createAudioHardware(void) {
     return new AudioHardware();
+}
+
+/****************************************************************************
+ * Local Function definition
+ ****************************************************************************/
+static int set_initial_audio_volume(void) 
+{
+    /* Winmo call this while initializing the audio device */
+    if ( SND_DEVICE_IDLE != -1) {
+        set_volume_rpc(SND_DEVICE_IDLE, 1, 5);
+        LOGV("Initial audio volume setting done");
+    } else {
+        LOGE("Can't set initial volume, SND_DEVICE_IDLE not defined");
+        return -EIO;
+    }
+    return NO_ERROR;
 }
 
 }; // namespace android
