@@ -36,6 +36,8 @@
 
 extern "C" {
 #include "a1010.h"
+
+#define AUDIENCE_A1010_DEV      "/dev/audience_A1010"
 }
 
 #define LOG_SND_RPC 0  // Set to 1 to log sound RPC's
@@ -198,9 +200,9 @@ AudioHardware::AudioHardware() :
             }
     
             /* Test for audience a1010 presence (rhodium devices only) */
-            a1010_fd = open("/dev/audience_A1010", O_RDWR);
+            a1010_fd = open(AUDIENCE_A1010_DEV, O_RDWR);
             if ( a1010_fd < 0 ) {
-                LOGE("Error opening dev %s (fd = %d). Error %s (%d)", "/dev/audience_A1010", a1010_fd,
+                LOGE("Error opening dev %s (fd = %d). Error %s (%d)", AUDIENCE_A1010_DEV, a1010_fd,
                             strerror(errno), errno);
                 support_a1010 = 0;
             } else {
@@ -675,9 +677,9 @@ status_t AudioHardware::doAudience_A1010_Control(void)
     int rc = 0;
 
     if (a1010_fd < 0) {
-        a1010_fd = open("/dev/audience_a1010", O_RDWR);
+        a1010_fd = open(AUDIENCE_A1010_DEV, O_RDWR);
         if (a1010_fd < 0) {
-            LOGE("Cannot open audience_a1010 device (%d)\n", a1010_fd);
+            LOGE("Cannot open audience_A1010 device (%d)\n", a1010_fd);
             return -1;
     	}
     }
