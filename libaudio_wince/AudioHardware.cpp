@@ -34,6 +34,10 @@
 #include "AudioHardware.h"
 #include <media/AudioRecord.h>
 
+extern "C" {
+#include "a1010.h"
+}
+
 #define LOG_SND_RPC 0  // Set to 1 to log sound RPC's
 
 namespace android {
@@ -96,6 +100,11 @@ static int SND_DEVICE_PLAYBACK_HEADSET = 254;
 
 static bool mUseAcoustic = false;
 static int bCurrentOutStream = AudioSystem::DEFAULT;
+
+static int support_a1010 = 0;
+static int a1010_fd = -1;
+static int old_pathid = -1;
+static int new_pathid = -1;
 
 // ----------------------------------------------------------------------------
 
@@ -186,6 +195,17 @@ AudioHardware::AudioHardware() :
             msm72xx_get_bluetooth_hs_id =(int (*)(const char*))::dlsym(acoustic, "msm72xx_get_bluetooth_hs_id");
             if ((*msm72xx_get_bluetooth_hs_id) == 0 ) {
                 LOGE("Could not link msm72xx_get_bluetooth_hs_id()");
+            }
+    
+            /* Test for audience a1010 presence (rhodium devices only) */
+            a1010_fd = open("/dev/audience_A1010", O_RDWR);
+            if ( a1010_fd < 0 ) {
+                LOGE("Error opening dev %s (fd = %d). Error %s (%d)", "/dev/audience_A1010", a1010_fd,
+                            strerror(errno), errno);
+                support_a1010 = 0;
+            } else {
+                support_a1010 = 1;
+                close(a1010_fd);
             }
     	}
 	}	
@@ -649,6 +669,42 @@ status_t AudioHardware::doUpdateVolume(uint32_t inputDevice)
     return NO_ERROR;
 }
 
+/* This functions configures the A1010 audience controller to use the correct settings */
+status_t AudioHardware::doAudience_A1010_Control(void)
+{
+    int rc = 0;
+
+    if (a1010_fd < 0) {
+        a1010_fd = open("/dev/audience_a1010", O_RDWR);
+        if (a1010_fd < 0) {
+            LOGE("Cannot open audience_a1010 device (%d)\n", a1010_fd);
+            return -1;
+    	}
+    }
+
+    if ( mCurSndDevice == SND_DEVICE_SPEAKER_MIC ) {
+        new_pathid = A1010_PATH_SPEAKER;
+    }
+    else {
+        new_pathid = A1010_PATH_SUSPEND;
+    }
+
+    if (old_pathid != new_pathid) {
+        LOGI("A1010: do ioctl(A1010_SET_CONFIG) to %d\n", new_pathid);
+	rc = ioctl(a1010_fd, A1010_SET_CONFIG, &new_pathid);
+	if (!rc)
+		old_pathid = new_pathid;
+	else
+	    goto Error;
+    }
+
+Error:
+    close(a1010_fd);
+    a1010_fd = -1;
+
+    return rc;
+}
+
 /* This function will be called on device change, so that hardware and software changes
  * will be done by the new acoustic library. It will enable outputs, set new tables,
  * handle special modes (like music playback, enable mic while recording), ...
@@ -728,6 +784,13 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
              && ((int)args->device == SND_DEVICE_SPEAKER) ) {
         args->device = (unsigned int)SND_DEVICE_SPEAKER_MIC;
         mCurSndDevice = SND_DEVICE_SPEAKER_MIC;
+    }
+
+    /* Currently only used for the SPEAKER_MIC device but might be expanded to other devices
+     * if dual mic selection is supported by android
+     */
+    if ( support_a1010 ) {
+        doAudience_A1010_Control();
     }
 
     LOGV("call snd_set_device %d", args->device);

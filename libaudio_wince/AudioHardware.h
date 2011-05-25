@@ -114,6 +114,7 @@ public:
     virtual status_t    setMasterVolume(float volume);
     virtual status_t    doUpdateVolume(uint32_t inputDevice);
     virtual status_t    doAcousticAudioDeviceChange(struct msm_snd_device_config* args);
+    virtual status_t    doAudience_A1010_Control(void);
     virtual status_t    do_route_audio_rpc(uint32_t device,
                                    bool ear_mute, bool mic_mute);
 
