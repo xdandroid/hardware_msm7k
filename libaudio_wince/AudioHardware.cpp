@@ -68,6 +68,7 @@ static int get_current_stream(void);
 static int SND_DEVICE_CURRENT=256;
 static int SND_DEVICE_HANDSET=0;
 static int SND_DEVICE_SPEAKER=1;
+static int SND_DEVICE_SPEAKER_MIC=1;
 static int SND_DEVICE_HEADSET=2;
 
 static int SND_DEVICE_BT=-1;
@@ -219,6 +220,7 @@ AudioHardware::AudioHardware() :
                 CHECK_FOR(CURRENT)
                 CHECK_FOR(HANDSET)
                 CHECK_FOR(SPEAKER)
+                CHECK_FOR(SPEAKER_MIC)
                 CHECK_FOR(BT)
                 CHECK_FOR(BT_EC_OFF)
                 CHECK_FOR(HEADSET)
@@ -654,6 +656,7 @@ status_t AudioHardware::doUpdateVolume(uint32_t inputDevice)
 status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config* args)
 {
     int fd;
+    uint32_t inputDevice = 0;
 
     LOGV("AudioHardware::update_device %d %d %d", args->device, args->ear_mute, args->mic_mute);
 
@@ -679,7 +682,7 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
             args->mic_mute = false;
         }
     } else {
-        uint32_t inputDevice = input->devices();
+        inputDevice = input->devices();
         if ( (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
              (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) ) {
             args->mic_mute = false;  
@@ -717,6 +720,14 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
     /* Do not use SND_DEVICE_CURRENT */
     if ( args->device == (unsigned int)SND_DEVICE_CURRENT ) {
         args->device = mCurSndDevice;
+    }
+
+    if ( ( (mMode == AudioSystem::MODE_IN_CALL) || 
+            (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
+            (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) )
+             && ((int)args->device == SND_DEVICE_SPEAKER) ) {
+        args->device = (unsigned int)SND_DEVICE_SPEAKER_MIC;
+        mCurSndDevice = SND_DEVICE_SPEAKER_MIC;
     }
 
     LOGV("call snd_set_device %d", args->device);
@@ -832,6 +843,7 @@ status_t AudioHardware::doRouting()
     if (inputDevice != 0) {
         LOGI("do input routing device %x\n", inputDevice);
  
+#if 0
         /* Audio recording seems to need some special tweaks to work when used with speakerphone
          * so default to headset to make it work
          */
@@ -839,7 +851,9 @@ status_t AudioHardware::doRouting()
              (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) ) {
             LOGI("Routing audio to Headset\n");
             sndDevice = SND_DEVICE_HANDSET;
-        } else if (inputDevice & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
+        } else 
+#endif
+        if (inputDevice & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
             LOGI("Routing audio to Bluetooth PCM\n");
             sndDevice = SND_DEVICE_BT;
         } else if (inputDevice & AudioSystem::DEVICE_IN_WIRED_HEADSET) {
