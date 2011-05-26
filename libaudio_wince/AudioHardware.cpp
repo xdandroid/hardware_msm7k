@@ -757,7 +757,17 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
         if ( (mMode == AudioSystem::MODE_IN_CALL) || (bCurrentOutStream != AudioSystem::DEFAULT) ) {
             bEnableOut = true;    
         }
-        msm72xx_set_audio_path(!args->mic_mute, 0, args->device, bEnableOut );
+        /* If recording while speaker is in use, then enable dual mic */
+        if ( ( (mMode == AudioSystem::MODE_IN_CALL) || 
+            (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
+            (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) )
+             && ((int)args->device == SND_DEVICE_SPEAKER) ) {
+            msm72xx_set_audio_path(!args->mic_mute, 1, args->device, bEnableOut );
+            args->device = (unsigned int)SND_DEVICE_SPEAKER_MIC;
+            mCurSndDevice = SND_DEVICE_SPEAKER_MIC;
+        } else {
+            msm72xx_set_audio_path(!args->mic_mute, 0, args->device, bEnableOut );
+        }
     }
 
 
@@ -778,14 +788,6 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
     /* Do not use SND_DEVICE_CURRENT */
     if ( args->device == (unsigned int)SND_DEVICE_CURRENT ) {
         args->device = mCurSndDevice;
-    }
-
-    if ( ( (mMode == AudioSystem::MODE_IN_CALL) || 
-            (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
-            (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) )
-             && ((int)args->device == SND_DEVICE_SPEAKER) ) {
-        args->device = (unsigned int)SND_DEVICE_SPEAKER_MIC;
-        mCurSndDevice = SND_DEVICE_SPEAKER_MIC;
     }
 
     /* Currently only used for the SPEAKER_MIC device but might be expanded to other devices
@@ -997,7 +999,7 @@ status_t AudioHardware::doRouting()
 
         if ( mUseAcoustic ) {
             /* Update the acoustic hardware with new device settings */
-            doUpdateVolume(sndDevice);
+            doUpdateVolume(mCurSndDevice);
         }
     }
 
