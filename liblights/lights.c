@@ -201,9 +201,9 @@ set_light_keyboard(struct light_device_t* dev,
         struct light_state_t const* state)
 {
     int err = 0;
-    int on = is_lit(state);
+    int brightness = rgb_to_brightness(state);
     pthread_mutex_lock(&g_lock);
-    err = write_int(KEYBOARD_FILE, on?255:0);
+    err = write_int(KEYBOARD_FILE, brightness);
     pthread_mutex_unlock(&g_lock);
     return err;
 }
@@ -216,7 +216,7 @@ set_light_buttons(struct light_device_t* dev,
     int on = is_lit(state);
     pthread_mutex_lock(&g_lock);
     g_buttons = on;
-    err = write_int(BUTTON_FILE, on?255:0);
+    err = write_int(BUTTON_FILE, on);
     pthread_mutex_unlock(&g_lock);
     return err;
 }
