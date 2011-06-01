@@ -1568,6 +1568,17 @@ exit:
     return out_path_method;
 }
 
+int msm72xx_start_acoustic_setting(void)
+{
+    LOGV("msm72xx_start_acoustic_setting");
+    struct audio_update_req req = {.type = ADIE_FORCE_ADIE_UPDATE_REQ, .value = 1};
+    if ( ioctl(acousticfd, ACOUSTIC_UPDATE_AUDIO_SETTINGS, &req) < 0) {
+        LOGE("ACOUSTIC_UPDATE_AUDIO_SETTINGS error.");
+        return -EIO;
+    }  
+    return 0;
+}
+
 int msm72xx_set_acoustic_done(void)
 {
     LOGV("msm72xx_set_acoustic_done");
@@ -1575,6 +1586,13 @@ int msm72xx_set_acoustic_done(void)
         LOGE("ACOUSTIC_ARM11_DONE error.");
         return -EIO;
     }
+
+    struct audio_update_req req = {.type = ADIE_FORCE_ADIE_UPDATE_REQ, .value = 0};
+    if ( ioctl(acousticfd, ACOUSTIC_UPDATE_AUDIO_SETTINGS, &req) < 0) {
+        LOGE("ACOUSTIC_UPDATE_AUDIO_SETTINGS error.");
+        return -EIO;
+    }  
+
     return 0;
 }
 

@@ -55,6 +55,7 @@ const uint32_t AudioHardware::inputSamplingRates[] = {
 int (*htc_acoustic_init)(void);
 int (*htc_acoustic_deinit)(void);
 int (*msm72xx_set_acoustic_table)(int device, int volume);
+int (*msm72xx_start_acoustic_setting)(void);
 int (*msm72xx_set_acoustic_done)(void);
 int (*msm72xx_set_audio_path)(bool bEnableMic, bool bEnableDualMic, int device_out, bool bEnableOut);
 int (*msm72xx_update_audio_method)(int method);
@@ -177,6 +178,11 @@ AudioHardware::AudioHardware() :
             msm72xx_set_acoustic_table = (int (*)(int, int))::dlsym(acoustic, "msm72xx_set_acoustic_table");
             if ((*msm72xx_set_acoustic_table) == 0 ) {
                 LOGE("Could not link msm72xx_set_acoustic_table()");
+            }
+
+            msm72xx_start_acoustic_setting = (int (*)(void))::dlsym(acoustic, "msm72xx_start_acoustic_setting");
+            if ((*msm72xx_start_acoustic_setting) == 0 ) {
+                LOGE("Could not link msm72xx_start_acoustic_setting()");
             }
 
             msm72xx_set_acoustic_done = (int (*)(void))::dlsym(acoustic, "msm72xx_set_acoustic_done");
@@ -651,6 +657,10 @@ status_t AudioHardware::doUpdateVolume(uint32_t inputDevice)
 
     LOGV("AudioHardware::doUpdateVolume %d", mCurSndDevice);
     
+    if ( msm72xx_start_acoustic_setting != NULL ) {
+        msm72xx_start_acoustic_setting();
+    }    
+
     /* When in call, use the METHOD_VOICE to set the volume */
     if ( mMode == AudioSystem::MODE_IN_CALL ) {
         set_volume_rpc(mCurSndDevice, SND_METHOD_VOICE, volume);
@@ -717,6 +727,10 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
     uint32_t inputDevice = 0;
 
     LOGV("AudioHardware::update_device %d %d %d", args->device, args->ear_mute, args->mic_mute);
+
+    if ( msm72xx_start_acoustic_setting != NULL ) {
+        msm72xx_start_acoustic_setting();
+    }
 
     /* If the current device is speaker, then lower the volume before 
      * switching to the new device.
@@ -804,6 +818,9 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
     fd = open("/dev/msm_snd", O_RDWR);
     if (fd < 0) {
         LOGE("Can not open snd device");
+        if ( msm72xx_set_acoustic_done != NULL ) {
+            msm72xx_set_acoustic_done();
+        }
         return -EPERM;
     }
 
@@ -813,6 +830,9 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
     if (ioctl(fd, SND_SET_DEVICE, args) < 0) {
         LOGE("snd_set_device error.");
         close(fd);
+        if ( msm72xx_set_acoustic_done != NULL ) {
+            msm72xx_set_acoustic_done();
+        }
         return -EIO;
     }
 

@@ -425,6 +425,7 @@ int msm72xx_enable_audpre(int acoustic_flags, int audpre_index, int tx_iir_index
 int snd_get_num_endpoints(void);
 int snd_get_endpoint(int, struct msm_snd_endpoint *);
 
+int msm72xx_start_acoustic_setting(void);
 int msm72xx_set_acoustic_table(int device, int volume);
 int msm72xx_set_acoustic_done(void);
 int msm72xx_set_audio_path(bool bEnableMic, bool bEnableDualMic,
