@@ -763,7 +763,6 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
             (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) )
              && ((int)args->device == SND_DEVICE_SPEAKER) ) {
             msm72xx_set_audio_path(!args->mic_mute, 1, args->device, bEnableOut );
-            args->device = (unsigned int)SND_DEVICE_SPEAKER_MIC;
             mCurSndDevice = SND_DEVICE_SPEAKER_MIC;
         } else {
             msm72xx_set_audio_path(!args->mic_mute, 0, args->device, bEnableOut );
@@ -788,6 +787,8 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
     /* Do not use SND_DEVICE_CURRENT */
     if ( args->device == (unsigned int)SND_DEVICE_CURRENT ) {
         args->device = mCurSndDevice;
+    } else if ( mCurSndDevice == SND_DEVICE_SPEAKER_MIC) {
+        args->device = (unsigned int)SND_DEVICE_SPEAKER_MIC;
     }
 
     /* Currently only used for the SPEAKER_MIC device but might be expanded to other devices
@@ -868,6 +869,8 @@ status_t AudioHardware::do_route_audio_rpc(uint32_t device,
         }
         close(fd);
     }
+
+    mCurSndDevice = args.device;
 
     return NO_ERROR;
 }
@@ -995,7 +998,6 @@ status_t AudioHardware::doRouting()
         } else {
             msm72xx_enable_audpp(audProcess);
         }
-        mCurSndDevice = sndDevice;
 
         if ( mUseAcoustic ) {
             /* Update the acoustic hardware with new device settings */
