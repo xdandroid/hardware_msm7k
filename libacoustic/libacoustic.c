@@ -130,7 +130,9 @@ static bool adrc_filter_exists[1];
 
 static struct tx_iir tx_iir_cfg[18];    // Normal + Full DUplex
 static struct ns ns_cfg[9];
+static bool audpre_ns_cfg_exist = false;
 static struct tx_agc tx_agc_cfg[9];
+static bool audpre_tx_agc_cfg_exist = false;
 
 // Current TPA2016 registers value initialized with default values
 static uint8_t tpa2016d2_regs[7] = { 0xC3, 0x05, 0x0B, 0x00, 0x06, 0x3A, 0xC2 };
@@ -142,6 +144,7 @@ static int SND_DEVICE_CURRENT;
 static int SND_DEVICE_HANDSET;
 static int SND_DEVICE_SPEAKER;
 static int SND_DEVICE_HEADSET;
+static int SND_DEVICE_SPEAKER_MIC=1;
 static int SND_DEVICE_BT;
 static int SND_DEVICE_CARKIT;
 static int SND_DEVICE_TTY_FULL;
@@ -249,6 +252,7 @@ static int get_sound_endpoints(void)
                 CHECK_FOR(CURRENT)
                 CHECK_FOR(HANDSET)
                 CHECK_FOR(SPEAKER)
+                CHECK_FOR(SPEAKER_MIC)
                 CHECK_FOR(BT)
                 CHECK_FOR(BT_EC_OFF)
                 CHECK_FOR(HEADSET)
@@ -339,7 +343,7 @@ static int UpdateAudioAdieTable(bool bAudioUplinkReq, int paramR1, bool bEnableH
                     }
                 }
             } else {
-                if ( Audio_Path_Table[table_num].array[tab_byte_idx] != 0x3E ) {
+                if ( Audio_Path_Table[table_num].array[tab_byte_idx] == 0x3E ) {
                     temp_table[tab_byte_idx + 1] = (temp_table[tab_byte_idx + 1] & 0xE7) | 0x10;           
                 }
             }
@@ -754,6 +758,9 @@ static int check_and_set_audpre_parameters(char *buf, int size)
             if (!(p = strtok(NULL, seps)))
                 goto token_err;
             }
+
+        audpre_tx_agc_cfg_exist = true;
+
     } else if ((buf[0] == 'C')) {       
         /* This is the NS record we are looking for.  Tokenize it */
         if (!(p = strtok(buf, ",")))
@@ -797,6 +804,8 @@ static int check_and_set_audpre_parameters(char *buf, int size)
         if (!(p = strtok(NULL, seps)))
             goto token_err;
         ns_cfg[samp_index].wb_gamma_n = (uint16_t)strtol(p, &ps, 16);
+
+        audpre_ns_cfg_exist = true;
     }
     return 0;
 
@@ -1291,26 +1300,30 @@ int msm72xx_set_audpre_params(int audpre_index, int tx_iir_index)
              return -EPERM;
         }
 
-         /* Setting AGC Params */
-        LOGI("AGC Filter Param4= %02x.", tx_agc_cfg[audpre_index].static_gain);
-        LOGI("AGC Filter Param5= %02x.", tx_agc_cfg[audpre_index].adaptive_gain_flag);
-        LOGI("AGC Filter Param6= %02x.", tx_agc_cfg[audpre_index].agc_params[0]);
-        LOGI("AGC Filter Param7= %02x.", tx_agc_cfg[audpre_index].agc_params[16]);
-        if (ioctl(fd, AUDIO_SET_AGC, &tx_agc_cfg[audpre_index]) < 0)
-        {
-            LOGE("set AGC filter error.");
+        if ( audpre_tx_agc_cfg_exist ) {
+             /* Setting AGC Params */
+            LOGI("AGC Filter Param4= %02x.", tx_agc_cfg[audpre_index].static_gain);
+            LOGI("AGC Filter Param5= %02x.", tx_agc_cfg[audpre_index].adaptive_gain_flag);
+            LOGI("AGC Filter Param6= %02x.", tx_agc_cfg[audpre_index].agc_params[0]);
+            LOGI("AGC Filter Param7= %02x.", tx_agc_cfg[audpre_index].agc_params[16]);
+            if (ioctl(fd, AUDIO_SET_AGC, &tx_agc_cfg[audpre_index]) < 0)
+            {
+                LOGE("set AGC filter error.");
+            }
         }
 
-         /* Setting NS Params */
-        LOGI("NS Filter Param3= %02x.", ns_cfg[audpre_index].dens_gamma_n);
-        LOGI("NS Filter Param4= %02x.", ns_cfg[audpre_index].dens_nfe_block_size);
-        LOGI("NS Filter Param5= %02x.", ns_cfg[audpre_index].dens_limit_ns);
-        LOGI("NS Filter Param6= %02x.", ns_cfg[audpre_index].dens_limit_ns_d);
-        LOGI("NS Filter Param7= %02x.", ns_cfg[audpre_index].wb_gamma_e);
-        LOGI("NS Filter Param8= %02x.", ns_cfg[audpre_index].wb_gamma_n);
-        if (ioctl(fd, AUDIO_SET_NS, &ns_cfg[audpre_index]) < 0)
-        {
-            LOGE("set NS filter error.");
+        if ( audpre_ns_cfg_exist ) {
+             /* Setting NS Params */
+            LOGI("NS Filter Param3= %02x.", ns_cfg[audpre_index].dens_gamma_n);
+            LOGI("NS Filter Param4= %02x.", ns_cfg[audpre_index].dens_nfe_block_size);
+            LOGI("NS Filter Param5= %02x.", ns_cfg[audpre_index].dens_limit_ns);
+            LOGI("NS Filter Param6= %02x.", ns_cfg[audpre_index].dens_limit_ns_d);
+            LOGI("NS Filter Param7= %02x.", ns_cfg[audpre_index].wb_gamma_e);
+            LOGI("NS Filter Param8= %02x.", ns_cfg[audpre_index].wb_gamma_n);
+            if (ioctl(fd, AUDIO_SET_NS, &ns_cfg[audpre_index]) < 0)
+            {
+                LOGE("set NS filter error.");
+            }
         }
 
         /* Setting TX_IIR Params */
@@ -1339,6 +1352,16 @@ int msm72xx_enable_audpre(int acoustic_flags, int audpre_index, int tx_iir_index
     if (fd < 0) {
          LOGE("Cannot open PreProc Ctl device");
          return -EPERM;
+    }
+
+    /* Remove the unused flags for device that don't have correct config parameters
+     * Flags values are token from enum audio_in_acoustics in AudioSystem.h
+     */
+    if ( !audpre_ns_cfg_exist ) {
+        acoustic_flags &= ~0x02;
+    }
+    if ( !audpre_tx_agc_cfg_exist ) {
+        acoustic_flags &= ~0x01;
     }
 
     /*Setting AUDPRE_ENABLE*/
@@ -1394,7 +1417,7 @@ int msm72xx_set_acoustic_table(int device, int volume)
     if( device == SND_DEVICE_HANDSET ) {
         LOGV("Acoustic profile : EARCUPLE");
         out_path = EARCUPLE;
-    } else if( device == SND_DEVICE_SPEAKER ) {
+    } else if( (device == SND_DEVICE_SPEAKER) || (device == SND_DEVICE_SPEAKER_MIC) ) {
         LOGV("Acoustic profile : HANDSFREE");
         out_path = HANDSFREE;
     } else if( device == SND_DEVICE_HEADSET ) {
