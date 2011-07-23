@@ -42,7 +42,7 @@
 
 /*****************************************************************************/
 
-// NOTE: must be the same than in oem.h
+// NOTE: this value must match what is supported by the binary GL driver.
 #define ALLOCATORREGION_RESERVED_SIZE           0x2F0000
 #define FB_ARENA                                HW3D_EBI
 
