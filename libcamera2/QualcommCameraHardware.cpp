@@ -2034,40 +2034,54 @@ status_t QualcommCameraHardware::cancelPicture()
     return NO_ERROR;
 }
 
-status_t QualcommCameraHardware::setParameters(
-        const CameraParameters& params)
-{
-    LOGV("setParameters: E params = %p", &params);
+status_t QualcommCameraHardware::
+setParameters(const CameraParameters & params) {
+	LOGE("setParameters: E params = %p", &params);
 
-    Mutex::Autolock l(&mLock);
-    /* TAG JB 01/21/2010 : Enhancement */   
-    status_t rc, final_rc = NO_ERROR;
+	Mutex::Autolock l(&mLock);
+	/* TAG JB 01/21/2010 : Enhancement */
+	status_t rc, final_rc = NO_ERROR;
 
-    if ((rc = setPreviewSize(params)))  final_rc = rc;
-    LOGV("setPreviewSize rc %d", rc);
-    if ((rc = setPictureSize(params)))  final_rc = rc;
-    LOGV("setPictureSize rc %d", rc);
-    if ((rc = setJpegThumbnailSize(params))) final_rc = rc;
-    LOGV("setJpegThumbnailSize rc %d", rc);
-    if ((rc = setAntibanding(params)))  final_rc = rc;
-    LOGV("setAntibanding rc %d", rc);
-    if ((rc = setEffect(params)))       final_rc = rc;
-    LOGV("setEffect rc %d", rc);
-    if ((rc = setWhiteBalance(params))) final_rc = rc;
-    LOGV("setWhiteBalance rc %d", rc);
-    if ((rc = setFlash(params)))        final_rc = rc;
-    LOGV("setFlash rc %d", rc);
+	if ((rc = setPreviewSize(params))){
+		final_rc = rc;
+		LOGE("setPreviewSize rc %d", rc);
+	}
+	if ((rc = setPictureSize(params))){
+		final_rc = rc;
+		LOGE("setPictureSize rc %d", rc);
+	}
+	if ((rc = setJpegThumbnailSize(params))){
+		final_rc = rc;
+		LOGE("setJpegThumbnailSize rc %d", rc);
+	}
+	if ((rc = setAntibanding(params))){
+		final_rc = rc;
+		LOGE("setAntibanding rc %d", rc);
+	}
+	if ((rc = setEffect(params))){
+		final_rc = rc;
+		LOGE("setEffect rc %d", rc);
+	}
+	if ((rc = setWhiteBalance(params))){
+		final_rc = rc;
+		LOGE("setWhiteBalance rc %d", rc);
+	}
+	if ((rc = setFlash(params))){
+		final_rc = rc;
+		LOGE("setFlash rc %d", rc);
+	}
 
-    // FIXME: set nightshot and luma adaptatiom
-    mParameters = params;
+	// FIXME: set nightshot and luma adaptatiom
+	mParameters = params;
 
-    /* TAG JB 01/21/2010 : Zoom */
-    if ((rc = setZoom(params)))         final_rc = rc;
-    LOGV("setZoom rc %d", rc);
-   
+	/* TAG JB 01/21/2010 : Zoom */
+	//setting zoom may fail but it is not critical
+	if ((rc = setZoom(params))) {
+		LOGE("setZoom rc %d", rc);
+	}
 
-    LOGV("setParameters: X");
-    return final_rc;
+	LOGE("setParameters: X");
+	return final_rc;
 }
 
 CameraParameters QualcommCameraHardware::getParameters() const
