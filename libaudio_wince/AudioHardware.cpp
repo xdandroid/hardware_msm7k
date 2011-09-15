@@ -772,12 +772,14 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
             bEnableOut = true;    
         }
         /* If recording while speaker is in use, then enable dual mic */
-        if ( ( (mMode == AudioSystem::MODE_IN_CALL) || 
-            (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
-            (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) )
+        if ( (mMode == AudioSystem::MODE_IN_CALL) && 
+            ((inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
+            (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC))
              && ((int)args->device == SND_DEVICE_SPEAKER) ) {
             msm72xx_set_audio_path(!args->mic_mute, 1, args->device, bEnableOut );
             mCurSndDevice = SND_DEVICE_SPEAKER_MIC;
+			args->device = SND_DEVICE_SPEAKER_MIC;
+			LOGI("mCurSndDevice <- SPEAKER_MIC");
         } else {
             msm72xx_set_audio_path(!args->mic_mute, 0, args->device, bEnableOut );
         }
@@ -791,18 +793,20 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
 
     /* Redirect output to correct device for specials devices */
     if ( (int)args->device == SND_DEVICE_PLAYBACK_HANDSFREE ) {
+		LOGI("redirecting output to SPEAKER");
         args->device = SND_DEVICE_SPEAKER;
     } else if ( (int)args->device == SND_DEVICE_PLAYBACK_HEADSET ) {
+		LOGI("redirecting output to HEADSET");
         args->device = SND_DEVICE_HEADSET;
     } else if ( (int)args->device >= BT_CUSTOM_DEVICES_ID_OFFSET ) {
+		LOGI("redirecting output to BT");
         args->device = SND_DEVICE_BT;
     }
  
     /* Do not use SND_DEVICE_CURRENT */
     if ( args->device == (unsigned int)SND_DEVICE_CURRENT ) {
+		LOGI("patching device to mCurSndDevice(%d)", mCurSndDevice);
         args->device = mCurSndDevice;
-    } else if ( mCurSndDevice == SND_DEVICE_SPEAKER_MIC) {
-        args->device = (unsigned int)SND_DEVICE_SPEAKER_MIC;
     }
 
     /* Currently only used for the SPEAKER_MIC device but might be expanded to other devices
