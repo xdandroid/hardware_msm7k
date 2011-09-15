@@ -21,7 +21,7 @@
 #include <utils/threads.h>
 #include <stdint.h>
 
-#define MSM_HTC_ACOUSTIC_WINCE "/dev/htc-acoustic_wince"
+#define MSM_HTC_ACOUSTIC_WINCE "/dev/htc_acoustic_wince"
 #define MSM_TPA2016D2_DEV      "/dev/tpa2016d2"
 
 #define MAX_MODE_NAME_LENGTH 32
