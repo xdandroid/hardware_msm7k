@@ -659,19 +659,25 @@ status_t AudioHardware::doUpdateVolume(uint32_t inputDevice)
     
     if ( msm72xx_start_acoustic_setting != NULL ) {
         msm72xx_start_acoustic_setting();
-    }    
+    } 
+
+	bool in_call = mMode == AudioSystem::MODE_IN_CALL;
+	bool use_mic = (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC);
+	use_mic |= (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC);
 
     /* When in call, use the METHOD_VOICE to set the volume */
-    if ( mMode == AudioSystem::MODE_IN_CALL ) {
-        set_volume_rpc(mCurSndDevice, SND_METHOD_VOICE, volume);
-    /* If recording sound via internal mics, use METHOD_AUDIO */
-    } else if ( (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
-                (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC) ) {
+    if (in_call) {
+		LOGI("updating volume method=VOICE");
+		set_volume_rpc(mCurSndDevice, SND_METHOD_VOICE, volume);
+    }
+	else if (use_mic) {
+		LOGI("updating recording volume method=AUDIO");
         set_volume_rpc(SND_DEVICE_REC_INC_MIC, SND_METHOD_AUDIO, volume);
-    /* All other cases */
-    } else {
-        set_volume_rpc(mCurSndDevice, mMode != AudioSystem::MODE_IN_CALL, volume);
-    }  
+	}
+	else {
+		LOGI("updating volume method=AUDIO");
+		set_volume_rpc(mCurSndDevice, SND_METHOD_AUDIO, volume);
+	}
 
     /* Tell the audio acoustic controller that we have processed the new settings */
     if ( msm72xx_set_acoustic_done != NULL ) {
@@ -731,6 +737,8 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
     if ( msm72xx_start_acoustic_setting != NULL ) {
         msm72xx_start_acoustic_setting();
     }
+	
+	bool in_call = mMode == AudioSystem::MODE_IN_CALL;
 
     /* If the current device is speaker, then lower the volume before 
      * switching to the new device.
@@ -738,8 +746,15 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
      * (i.e : on diamond)
      */
     if ( mCurSndDevice != SND_DEVICE_IDLE ) {
-        set_volume_rpc(SND_DEVICE_CURRENT, mMode != AudioSystem::MODE_IN_CALL, 0);
-    }
+        if (in_call) {
+			LOGI("disabling volume method=VOICE");
+			set_volume_rpc(SND_DEVICE_CURRENT, SND_METHOD_VOICE, 0);
+		}
+		else {
+			LOGI("disabling volume method=AUDIO");
+			set_volume_rpc(SND_DEVICE_CURRENT, SND_METHOD_AUDIO, 0);
+    	}
+	}
 
     /* Microphone should be un-muted when recording or during voice call */
     AudioStreamInMSM72xx *input = getActiveInput_l();
@@ -768,7 +783,6 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
         /* XXX: Can't be used. @ boot time, isStreamActive blocks media service.
         bool bMusic;
         AudioSystem::isStreamActive(AudioSystem::MUSIC, &bMusic);*/
-		bool in_call = mMode == AudioSystem::MODE_IN_CALL;
         if (in_call || (bCurrentOutStream != AudioSystem::DEFAULT)) {
             bEnableOut = true;    
         }
