@@ -768,14 +768,16 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
         /* XXX: Can't be used. @ boot time, isStreamActive blocks media service.
         bool bMusic;
         AudioSystem::isStreamActive(AudioSystem::MUSIC, &bMusic);*/
-        if ( (mMode == AudioSystem::MODE_IN_CALL) || (bCurrentOutStream != AudioSystem::DEFAULT) ) {
+		bool in_call = mMode == AudioSystem::MODE_IN_CALL;
+        if (in_call || (bCurrentOutStream != AudioSystem::DEFAULT)) {
             bEnableOut = true;    
         }
         /* If recording while speaker is in use, then enable dual mic */
-        if ( (mMode == AudioSystem::MODE_IN_CALL) && 
-            ((inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
-            (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC))
-             && ((int)args->device == SND_DEVICE_SPEAKER) ) {
+		bool use_mic = inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC;
+		bool rear_mic = inputDevice & AudioSystem::DEVICE_IN_BACK_MIC;
+		bool use_spk = ((int)args->device) == SND_DEVICE_SPEAKER;
+
+		if ((in_call || use_mic || rear_mic) && use_spk) {
             msm72xx_set_audio_path(!args->mic_mute, 1, args->device, bEnableOut );
             mCurSndDevice = SND_DEVICE_SPEAKER_MIC;
 			args->device = SND_DEVICE_SPEAKER_MIC;
