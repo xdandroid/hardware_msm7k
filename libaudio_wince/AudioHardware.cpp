@@ -777,6 +777,24 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
             args->mic_mute = true;
         }
     }
+    
+	/* Redirect output to correct device for specials devices */
+    if ( (int)args->device == SND_DEVICE_PLAYBACK_HANDSFREE ) {
+		LOGI("redirecting output to SPEAKER");
+        args->device = SND_DEVICE_SPEAKER;
+    } else if ( (int)args->device == SND_DEVICE_PLAYBACK_HEADSET ) {
+		LOGI("redirecting output to HEADSET");
+        args->device = SND_DEVICE_HEADSET;
+    } else if ( (int)args->device >= BT_CUSTOM_DEVICES_ID_OFFSET ) {
+		LOGI("redirecting output to BT");
+        args->device = SND_DEVICE_BT;
+    }
+ 
+    /* Do not use SND_DEVICE_CURRENT */
+    if ( args->device == (unsigned int)SND_DEVICE_CURRENT ) {
+		LOGI("patching device to mCurSndDevice(%d)", mCurSndDevice);
+        args->device = mCurSndDevice;
+    }
 
     if ( msm72xx_set_audio_path != NULL ) {
         bool bEnableOut = false;
@@ -801,29 +819,11 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
         }
     }
 
-
     // TODO : switch on/off leds as done in msm_setup_audio() ? 
     if ( msm72xx_set_acoustic_table != NULL ) {
         msm72xx_set_acoustic_table(args->device, get_master_volume());
     }
 
-    /* Redirect output to correct device for specials devices */
-    if ( (int)args->device == SND_DEVICE_PLAYBACK_HANDSFREE ) {
-		LOGI("redirecting output to SPEAKER");
-        args->device = SND_DEVICE_SPEAKER;
-    } else if ( (int)args->device == SND_DEVICE_PLAYBACK_HEADSET ) {
-		LOGI("redirecting output to HEADSET");
-        args->device = SND_DEVICE_HEADSET;
-    } else if ( (int)args->device >= BT_CUSTOM_DEVICES_ID_OFFSET ) {
-		LOGI("redirecting output to BT");
-        args->device = SND_DEVICE_BT;
-    }
- 
-    /* Do not use SND_DEVICE_CURRENT */
-    if ( args->device == (unsigned int)SND_DEVICE_CURRENT ) {
-		LOGI("patching device to mCurSndDevice(%d)", mCurSndDevice);
-        args->device = mCurSndDevice;
-    }
 
     /* Currently only used for the SPEAKER_MIC device but might be expanded to other devices
      * if dual mic selection is supported by android

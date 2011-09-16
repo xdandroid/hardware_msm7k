@@ -1618,8 +1618,9 @@ int msm72xx_set_audio_path(bool bEnableMic, bool bEnableDualMic,
         audio_path.bEnableHeadset = false;
     }
 
-    LOGV("msm72xx_set_audio_path: Mic = %d, DualMic = %d, Speaker = %d, Headset = %d",
-            bEnableMic, bEnableDualMic, audio_path.bEnableSpeaker, audio_path.bEnableHeadset);
+    LOGV("msm72xx_set_audio_path: device=%d Mic = %d, DualMic = %d, Speaker = %d, Headset = %d",
+            device_out,
+			bEnableMic, bEnableDualMic, audio_path.bEnableSpeaker, audio_path.bEnableHeadset);
 
     UpdateAudioAdieTable(bEnableMic, 0, 0, 0, false);
     
