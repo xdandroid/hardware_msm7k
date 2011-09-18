@@ -34,6 +34,8 @@ LOCAL_SHARED_LIBRARIES := \
     libmedia \
     libhardware_legacy
 
+LOCAL_MODULE_TAGS := optional
+
 ifeq ($TARGET_OS)-$(TARGET_SIMULATOR),linux-true)
 LOCAL_LDLIBS += -ldl
 endif
