@@ -15,7 +15,7 @@
  */
 
 
-// #define LOG_NDEBUG 0
+#define LOG_NDEBUG 1
 #define LOG_TAG "lights"
 
 #include <cutils/log.h>
@@ -248,33 +248,26 @@ set_trackball_light_locked(struct light_device_t* dev,
     green = (colorRGB >> 8) & 0xFF;
     blue = colorRGB & 0xFF;
 
-//#if 0
-    LOGD("set_trackball_light_locked colorRGB=%08X, onMS=%d, offMS=%d\n",
-            colorRGB, onMS, offMS);
-//#endif
+    LOGV("%s: g_trackball=%d colorRGB=%08X, onMS=%d, offMS=%d\n", __func__,
+        g_trackball, colorRGB, onMS, offMS);
 
-    if (red && !(onMS || offMS) && (g_trackball != 2))        //Solid red -> Charging (BREATHE)
-    {
-        g_trackball=2;
-        write_int(TRACKBALL_FILE, 2);
-    } else if (red && (onMS || offMS) && (g_trackball != 3))    //Blinking red -> Critical battery (VERTICAL)
-    {
-        g_trackball=3;
-        write_int(TRACKBALL_FILE, 3);
-    } else if (green && !(onMS || offMS) && (g_trackball != 4)) //Solid green -> Charged (BLINK)
-    {
-        g_trackball=4;
-        write_int(TRACKBALL_FILE, 4);
-    } else if (green && (onMS || offMS))  //Blinking green -> Taskbar notification (ROTATE)
-    {
-        g_trackball=1;
-        write_int(TRACKBALL_FILE, 1);
+    if (red && !(onMS || offMS) && (g_trackball != 2)) {
+        //Solid red -> Charging (BREATHE)
+        g_trackball = 2;
+    } else if (red && (onMS || offMS) && (g_trackball != 3)) {
+        //Blinking red -> Critical battery (VERTICAL)
+        g_trackball = 3;
+    } else if (green && !(onMS || offMS) && (g_trackball != 7)) {
+        //Solid green -> Charged (SOLID)
+        g_trackball = 7;
+    } else if (green && (onMS || offMS)) {
+        //Blinking green -> Taskbar notification (ROTATE)
+        g_trackball = 1;
+    } else {
+        //Off
+        g_trackball = 0;
     }
-    else                                //Off
-    {
-        g_trackball=0;
-        write_int(TRACKBALL_FILE, 0);
-    }
+    write_int(TRACKBALL_FILE, g_trackball);
 
     return 0;
 }
@@ -303,10 +296,8 @@ set_speaker_light_locked(struct light_device_t* dev,
 
     colorRGB = state->color;
 
-#if 0
-    LOGD("set_speaker_light_locked colorRGB=%08X, onMS=%d, offMS=%d\n",
+    LOGV("set_speaker_light_locked colorRGB=%08X, onMS=%d, offMS=%d\n",
             colorRGB, onMS, offMS);
-#endif
 
     red = (colorRGB >> 16) & 0xFF;
     green = (colorRGB >> 8) & 0xFF;
@@ -373,17 +364,22 @@ static void
 handle_speaker_battery_locked(struct light_device_t* dev)
 {
     if (is_lit(&g_battery)) {
+        LOGV("%s: handling g_battery", __func__);
         set_speaker_light_locked(dev, &g_battery);
     } else {
+        LOGV("%s: handling g_battery", __func__);
         set_speaker_light_locked(dev, &g_notification);
     }
 }
 
-static void handle_trackball_battery_locked(struct light_device_t* dev)
+static void
+handle_trackball_battery_locked(struct light_device_t* dev)
 {
     if (is_lit(&g_battery)) {
+        LOGV("%s: handling g_battery", __func__);
         set_trackball_light_locked(dev, &g_battery);
     } else {
+        LOGV("%s: handling g_notification", __func__);
         set_trackball_light_locked(dev, &g_notification);
     }
 }
@@ -396,8 +392,7 @@ set_light_battery(struct light_device_t* dev,
     g_battery = *state;
     if (g_haveTrackballLight) {
         handle_trackball_battery_locked(dev);
-    }
-    else {
+    } else {
         handle_speaker_battery_locked(dev);
     }
     pthread_mutex_unlock(&g_lock);
@@ -410,12 +405,11 @@ set_light_notifications(struct light_device_t* dev,
 {
     pthread_mutex_lock(&g_lock);
     g_notification = *state;
-    LOGV("set_light_notifications g_trackball=%d color=0x%08x",
-            g_trackball, state->color);
+    LOGV("%s: g_trackball=%d color=0x%08x", __func__, g_trackball,
+        state->color);
     if (g_haveTrackballLight) {
         handle_trackball_battery_locked(dev);
-    }
-    else {
+    } else {
         handle_speaker_battery_locked(dev);
     }
     pthread_mutex_unlock(&g_lock);
@@ -427,7 +421,7 @@ set_light_attention(struct light_device_t* dev,
         struct light_state_t const* state)
 {
     pthread_mutex_lock(&g_lock);
-    LOGV("set_light_attention g_trackball=%d flashOnMS=%d flashMode=%d color=0x%08x",
+    LOGV("%s: g_trackball=%d flashOnMS=%d flashMode=%d color=0x%08x", __func__,
             g_trackball, state->flashOnMS, state->flashMode, state->color);
     if (state->flashMode == LIGHT_FLASH_HARDWARE) {
         g_attention = state->flashOnMS;
