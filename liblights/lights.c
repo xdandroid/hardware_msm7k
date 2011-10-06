@@ -41,7 +41,6 @@ static struct light_state_t g_notification;
 static struct light_state_t g_battery;
 static int g_backlight = 255;
 static int g_trackball = 0;
-static int g_buttons = 0;
 static int g_attention = 0;
 static int g_haveAmberLed = 0;
 static int g_brightnessMode = 0;
@@ -214,10 +213,9 @@ set_light_buttons(struct light_device_t* dev,
         struct light_state_t const* state)
 {
     int err = 0;
-    int on = is_lit(state);
+    int brightness = rgb_to_brightness(state);
     pthread_mutex_lock(&g_lock);
-    g_buttons = on;
-    err = write_int(BUTTON_FILE, on);
+    err = write_int(BUTTON_FILE, brightness);
     pthread_mutex_unlock(&g_lock);
     return err;
 }
