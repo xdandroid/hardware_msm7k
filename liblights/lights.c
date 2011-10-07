@@ -365,7 +365,7 @@ handle_speaker_battery_locked(struct light_device_t* dev)
         LOGV("%s: handling g_battery", __func__);
         set_speaker_light_locked(dev, &g_battery);
     } else {
-        LOGV("%s: handling g_battery", __func__);
+        LOGV("%s: handling g_notification", __func__);
         set_speaker_light_locked(dev, &g_notification);
     }
 }
