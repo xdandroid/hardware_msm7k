@@ -49,6 +49,12 @@ static int g_haveSysFsAutoBacklight = 0;
 char const*const TRACKBALL_FILE
         = "/sys/class/leds/jogball-backlight/brightness";
 
+char const*const CAPS_FILE
+        = "/sys/class/leds/caps/brightness";
+
+char const*const FUNC_FILE
+        = "/sys/class/leds/func/brightness";
+
 char const*const RED_LED_FILE
         = "/sys/class/leds/red/brightness";
 
@@ -216,6 +222,32 @@ set_light_buttons(struct light_device_t* dev,
     int brightness = rgb_to_brightness(state);
     pthread_mutex_lock(&g_lock);
     err = write_int(BUTTON_FILE, brightness);
+    pthread_mutex_unlock(&g_lock);
+    return err;
+}
+
+static int
+set_light_caps(struct light_device_t* dev,
+        struct light_state_t const* state)
+{
+    int err = 0;
+    int on = is_lit(state);
+    LOGV("%s: CAPS led activity, setting led: %d", __func__,on);
+    pthread_mutex_lock(&g_lock);
+    err = write_int(CAPS_FILE, on?1:0);
+    pthread_mutex_unlock(&g_lock);
+    return err;
+}
+
+static int
+set_light_func(struct light_device_t* dev,
+        struct light_state_t const* state)
+{
+    int err = 0;
+    int on = is_lit(state);
+    LOGV("%s: FUNC led activity, setting led: %d", __func__,on);
+    pthread_mutex_lock(&g_lock);
+    err = write_int(FUNC_FILE, on?1:0);
     pthread_mutex_unlock(&g_lock);
     return err;
 }
@@ -476,6 +508,12 @@ static int open_lights(const struct hw_module_t* module, char const* name,
     }
     else if (0 == strcmp(LIGHT_ID_ATTENTION, name)) {
         set_light = set_light_attention;
+    }
+    else if (0 == strcmp(LIGHT_ID_CAPS, name)) {
+        set_light = set_light_caps;
+    }
+    else if (0 == strcmp(LIGHT_ID_FN, name)) {
+        set_light = set_light_func;
     }
     else {
         return -EINVAL;
