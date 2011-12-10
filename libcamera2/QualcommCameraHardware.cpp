@@ -1266,21 +1266,8 @@ bool QualcommCameraHardware::native_jpeg_encode(void)
 
 /* TAG JB 01/20/2010 : Dual library support */
     uint8_t * thumbnailHeap = NULL;
-    int thumbfd = -1;
+    int thumbfd = 0;
     
-    int width = mParameters.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_WIDTH);
-    int height = mParameters.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_HEIGHT);
-
-    LOGV("width %d and height %d", width , height);
-
-    if(width != 0 && height != 0){
-        thumbnailHeap = (uint8_t *)mThumbnailHeap->mHeap->base();
-        thumbfd =  mThumbnailHeap->mHeap->getHeapID();
-    }else {
-        thumbnailHeap = NULL;
-        thumbfd = 0;
-    }
-
     if ( liboemcamera_version == BASIC_LIB ) {
         cam_ctrl_dimension_t_basic mDimensionBasic;
         cam_ctrl_dimension_convert(mDimension, mDimensionBasic);
