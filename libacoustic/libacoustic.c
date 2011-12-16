@@ -1540,18 +1540,29 @@ int msm72xx_set_acoustic_table(int device, int volume)
             if ( out_path_method == SND_METHOD_NONE ) {
                 goto exit;
             } else if ( out_path_method == SND_METHOD_AUDIO ) {
-                /* Set default audio settings */
+                LOGV("%s: TPA2016D2: applying AUDIO settings", __func__);
                 memcpy(tpa2016d2_regs, tpa2016d2_regs_audio, 7);
             } else if ( out_path_method == SND_METHOD_VOICE ) {
-                /* Set default voice settings */
+                LOGV("%s: TPA2016D2: applying VOICE settings", __func__);
                 memcpy(tpa2016d2_regs, tpa2016d2_regs_voice, 7);
             }
-            /* Set volume */
-            tpa2016d2_regs[FIXED_GAIN_REG-1] = volume * 6;
+            /* Setting a fixed gain level. Using a dynamic one (volume*6) is
+             * useless because volume is auto leveled by the framework and the
+             * actual volume change is only applied when audio devices have been
+             * suspended in between. (So if you toggle volume rocker quickly,
+             * the request isn't arriving here.)
+             */
+            tpa2016d2_regs[FIXED_GAIN_REG-1] = 0x10; // 16dB
+            /* "Disable" the AGC in order to prevent rising volume indicator or
+             * dial tones on max volume. This also allows for good initial
+             * notification and ringer volume.
+             */
+            tpa2016d2_regs[AGC_REG1-1] = 0x0;
+            tpa2016d2_regs[AGC_REG2-1] = 0x0;
             if (ioctl(TPA2016fd, TPA2016_SET_CONFIG, &tpa2016d2_regs ) < 0) {
                 LOGE("TPA2016_SET_CONFIG error.");
                 return -EIO;
-            }  
+            }
         }  
 #if 0
         if ( (out_path_method == SND_METHOD_VOICE) ||
@@ -1633,15 +1644,16 @@ int msm72xx_set_audio_path(bool bEnableMic, bool bEnableDualMic,
         if (ioctl(TPA2016fd, TPA2016_SET_POWER, &audio_path.bEnableSpeaker ) < 0) {
             LOGE("TPA2016_SET_POWER error.");
             return -EIO;
-        } 
+        }
         
         if ( bEnableOut ) {
             /* Enable both outputs */
             tpa2016d2_regs[IC_REG-1] |= (SPK_EN_L | SPK_EN_R);
+            LOGV("%s: TPA2016D2: enabling speakers", __func__);
             if (ioctl(TPA2016fd, TPA2016_SET_CONFIG, &tpa2016d2_regs ) < 0) {
                 LOGE("TPA2016_SET_CONFIG error.");
                 return -EIO;
-            }        
+            }
         }
     }
 
