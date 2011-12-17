@@ -112,7 +112,7 @@ static int new_pathid = -1;
 // ----------------------------------------------------------------------------
 
 AudioHardware::AudioHardware() :
-    mInit(false), mMicMute(true), mBluetoothNrec(true), mBluetoothId(0),
+    mInit(false), mMicMute(false), mBluetoothNrec(true), mBluetoothId(0),
     mOutput(0), mSndEndpoints(NULL), mCurSndDevice(-1)
 {
 
@@ -760,14 +760,18 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
     AudioStreamInMSM72xx *input = getActiveInput_l();
     if ( input == NULL ) 
     {
-        /* To be removed if the "send_mic_mute_to_AudioManager" param is set
+        /* FIXME: this comment is wrong; on voice call, input is NULL and this
+         * route is taken.
+         * To be removed if the "send_mic_mute_to_AudioManager" param is set
          * to true in the phone app config file (/packages/apps/Phone/res/values/config.xml)
          */
+#if 0
         if ( mMode != AudioSystem::MODE_IN_CALL ) {
             args->mic_mute = true;  
         } else {
             args->mic_mute = false;
         }
+#endif
     } else {
         inputDevice = input->devices();
         if (inputDevice & AudioSystem::DEVICE_IN_ALL) {
