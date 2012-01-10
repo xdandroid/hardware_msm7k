@@ -165,6 +165,7 @@ static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
 static int SND_DEVICE_PLAYBACK_HEADSET = 254;
 
 static int mCurrentSndDevice = -1;
+static int mCurrentOutPath = -1;
 static int mCurrentVolume = 0;
 static int mCurrent_Adie_PGA_Gain = 1;
 
@@ -1453,6 +1454,10 @@ int msm72xx_set_acoustic_table(int device, int volume)
     } else if ( device >= BT_CUSTOM_DEVICES_ID_OFFSET ) {
         LOGV("Acoustic profile : CUSTOM_BTHEADSET");
         out_path = CUSTOM_BTHEADSET;
+    } else {
+        LOGV("Acoustic profile: CURRENT");
+        device = mCurrentSndDevice;
+        out_path = mCurrentOutPath;
     }
 
     // TODO : See UpdateVolumeTable from CE for device = 3
@@ -1572,6 +1577,7 @@ int msm72xx_set_acoustic_table(int device, int volume)
 #endif
 exit:
         mCurrentSndDevice = device;
+        mCurrentOutPath = out_path;
     }
 
     mCurrentVolume = volume;
