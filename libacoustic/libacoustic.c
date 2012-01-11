@@ -1619,7 +1619,7 @@ int msm72xx_set_audio_path(bool bEnableMic, bool bEnableDualMic,
     struct msm_audio_path audio_path = {.bEnableMic = bEnableMic, .bEnableDualMic = bEnableDualMic};
 
     if ( bEnableOut ) {
-        if ( (device_out == SND_DEVICE_SPEAKER) || (device_out == SND_DEVICE_PLAYBACK_HANDSFREE) ) {
+        if ( (device_out==SND_DEVICE_SPEAKER_MIC) || (device_out == SND_DEVICE_SPEAKER) || (device_out == SND_DEVICE_PLAYBACK_HANDSFREE) ) {
             audio_path.bEnableSpeaker = true;
         } else {
             audio_path.bEnableSpeaker = false;
