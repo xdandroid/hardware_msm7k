@@ -1658,6 +1658,7 @@ static int get_master_volume(void)
 
 static int get_current_stream(void) 
 {
+#if 0
     bool bStreamIsActive;
     int stream;
     
@@ -1670,6 +1671,8 @@ static int get_current_stream(void)
     }
 
     return AudioSystem::DEFAULT;
+#endif
+	return 1;
 }
 
 }; // namespace android
