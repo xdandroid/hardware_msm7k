@@ -1277,7 +1277,7 @@ int msm72xx_enable_audpp(int enable_mask)
         }
     }
 
-    LOGE("msm72xx_enable_audpp: 0x%04x", enable_mask);
+    LOGI("msm72xx_enable_audpp: 0x%04x", enable_mask);
     if (ioctl(fd, AUDIO_ENABLE_AUDPP, &enable_mask) < 0) {
         LOGE("enable audpp error");
         close(fd);
@@ -1518,7 +1518,7 @@ int msm72xx_set_acoustic_table(int device, int volume)
         break;
 
         default:
-            LOGE("Unknown out_path");
+            LOGE("Unknown out_path %d", out_path);
         break;
     }
 
