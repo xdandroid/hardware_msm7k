@@ -66,7 +66,6 @@ int (*msm72xx_get_bluetooth_hs_id)(const char* BT_Name);
  ****************************************************************************/
 static int set_initial_audio_volume(void);
 static int get_master_volume(void);
-static int get_current_stream(void);
 
 /****************************************************************************
  * Sound devices ids
@@ -102,7 +101,7 @@ static int SND_DEVICE_PLAYBACK_HANDSFREE = 253;
 static int SND_DEVICE_PLAYBACK_HEADSET = 254;
 
 static bool mUseAcoustic = false;
-static int bCurrentOutStream = AudioSystem::DEFAULT;
+static bool playback_in_progress = false;
 
 static int support_a1010 = 0;
 static int a1010_fd = -1;
@@ -806,7 +805,7 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
         /* XXX: Can't be used. @ boot time, isStreamActive blocks media service.
         bool bMusic;
         AudioSystem::isStreamActive(AudioSystem::MUSIC, &bMusic);*/
-        if (in_call || (bCurrentOutStream != AudioSystem::DEFAULT)) {
+        if (in_call || playback_in_progress) {
             bEnableOut = true;    
         }
         /* If recording while speaker is in use, then enable dual mic */
@@ -1165,7 +1164,7 @@ AudioHardware::AudioStreamOutMSM72xx::~AudioStreamOutMSM72xx()
 {
     if ( mUseAcoustic ) {
         /* Reset output stream to default and apply setting to acoustic device */
-        bCurrentOutStream = AudioSystem::DEFAULT;
+        playback_in_progress = false;
         mHardware->doAudioRouteOrMute(SND_DEVICE_CURRENT);
     }
     if (mFd >= 0) close(mFd);
@@ -1238,8 +1237,8 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
             ioctl(mFd, AUDIO_START, 0);
      
             if ( mUseAcoustic ) {
-                /* Get the current output stream type */
-                bCurrentOutStream = get_current_stream();
+                /* We have already started writing to the device, make sure output is enabled when msm72xx_set_audio_path is called from doAcousticAudioDeviceChange */
+                playback_in_progress = true;
                 /* Sets up acoustic hardware */
                 if ( mHardware->mCurSndDevice == SND_DEVICE_SPEAKER ) {
                     mHardware->doAudioRouteOrMute(SND_DEVICE_PLAYBACK_HANDSFREE);
@@ -1258,7 +1257,7 @@ Error:
     if (mFd >= 0) {
         if ( mUseAcoustic ) {
             /* Reset output stream to default and apply setting to acoustic device */
-            bCurrentOutStream = AudioSystem::DEFAULT;
+            playback_in_progress = false;
             mHardware->doAudioRouteOrMute(SND_DEVICE_CURRENT);
         }
         ::close(mFd);
@@ -1276,7 +1275,7 @@ status_t AudioHardware::AudioStreamOutMSM72xx::standby()
     if (!mStandby && mFd >= 0) {
         if ( mUseAcoustic ) {
             /* Reset output stream to default and apply setting to acoustic device */
-            bCurrentOutStream = AudioSystem::DEFAULT;
+            playback_in_progress = false;
             mHardware->doAudioRouteOrMute(SND_DEVICE_CURRENT);
         }
         ::close(mFd);
@@ -1654,25 +1653,6 @@ static int get_master_volume(void)
     AudioSystem::getMasterVolume(&volume);
     volume = ceil(volume * 5.0);
     return volume;
-}
-
-static int get_current_stream(void) 
-{
-#if 0
-    bool bStreamIsActive;
-    int stream;
-    
-    for (stream = AudioSystem::VOICE_CALL; stream<AudioSystem::NUM_STREAM_TYPES; stream++) {
-        AudioSystem::isStreamActive(stream, &bStreamIsActive);
-        //LOGV("Stream %d status : %d", stream, bStreamIsActive);
-        if ( bStreamIsActive ) {
-            return stream;
-        }
-    }
-
-    return AudioSystem::DEFAULT;
-#endif
-	return 1;
 }
 
 }; // namespace android
