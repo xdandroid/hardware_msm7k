@@ -133,15 +133,15 @@ AudioHardware::AudioHardware() :
     }
 
 #if 0	/* The function in the original libhtc_acoustic parse the parameters
-		 * from csv files and write the params in the shared memory.
-		 * We can't use it because our AMSS does not work the same way.
-		 * Plus, it won't be used as the htc-acoustic device required in 
-		 * the kernel is disabled (to avoid the original parameters to be screwed).
-		 * Our AMSS need only the current audio parameters to be written in
-		 * shared memory at a fixed offset.
-		 * The "custom" libhtc_acoustic will do this for us, with the help
-		 * of a new htc-acousctic_wince device
-		 */
+         * from csv files and write the params in the shared memory.
+         * We can't use it because our AMSS does not work the same way.
+         * Plus, it won't be used as the htc-acoustic device required in
+         * the kernel is disabled (to avoid the original parameters to be screwed).
+         * Our AMSS need only the current audio parameters to be written in
+         * shared memory at a fixed offset.
+         * The "custom" libhtc_acoustic will do this for us, with the help
+         * of a new htc-acousctic_wince device
+         */
     set_acoustic_parameters = (int (*)(void))::dlsym(acoustic, "set_acoustic_parameters");
     if ((*set_acoustic_parameters) == 0 ) {
         LOGE("Could not open set_acoustic_parameters()");
@@ -155,7 +155,7 @@ AudioHardware::AudioHardware() :
     }
 #endif
 
-	htc_acoustic_init = (int (*)(void))::dlsym(acoustic, "htc_acoustic_init");
+    htc_acoustic_init = (int (*)(void))::dlsym(acoustic, "htc_acoustic_init");
     if ((*htc_acoustic_init) == 0 ) {
         LOGE("Could not link htc_acoustic_init()");
     }
@@ -215,7 +215,7 @@ AudioHardware::AudioHardware() :
                 close(a1010_fd);
             }
     	}
-	}	
+    }
 
     snd_get_num = (int (*)(void))::dlsym(acoustic, "snd_get_num_endpoints");
     if ((*snd_get_num) == 0 ) {
@@ -658,25 +658,25 @@ status_t AudioHardware::doUpdateVolume(uint32_t inputDevice)
     
     if ( msm72xx_start_acoustic_setting != NULL ) {
         msm72xx_start_acoustic_setting();
-    } 
+    }
 
-	bool in_call = mMode == AudioSystem::MODE_IN_CALL;
-	bool use_mic = (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC);
-	use_mic |= (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC);
+    bool in_call = mMode == AudioSystem::MODE_IN_CALL;
+    bool use_mic = (inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC);
+    use_mic |= (inputDevice & AudioSystem::DEVICE_IN_BACK_MIC);
 
     /* When in call, use the METHOD_VOICE to set the volume */
     if (in_call) {
-		LOGI("updating volume method=VOICE");
-		set_volume_rpc(mCurSndDevice, SND_METHOD_VOICE, volume);
+        LOGI("updating volume method=VOICE");
+        set_volume_rpc(mCurSndDevice, SND_METHOD_VOICE, volume);
     }
-	else if (use_mic) {
-		LOGI("updating recording volume method=AUDIO");
+    else if (use_mic) {
+        LOGI("updating recording volume method=AUDIO");
         set_volume_rpc(SND_DEVICE_REC_INC_MIC, SND_METHOD_AUDIO, volume);
-	}
-	else {
-		LOGI("updating volume method=AUDIO");
-		set_volume_rpc(mCurSndDevice, SND_METHOD_AUDIO, volume);
-	}
+    }
+    else {
+        LOGI("updating volume method=AUDIO");
+        set_volume_rpc(mCurSndDevice, SND_METHOD_AUDIO, volume);
+    }
 
     /* Tell the audio acoustic controller that we have processed the new settings */
     if ( msm72xx_set_acoustic_done != NULL ) {
@@ -708,11 +708,11 @@ status_t AudioHardware::doAudience_A1010_Control(void)
 
     if (old_pathid != new_pathid) {
         LOGI("A1010: do ioctl(A1010_SET_CONFIG) to %d\n", new_pathid);
-	rc = ioctl(a1010_fd, A1010_SET_CONFIG, &new_pathid);
-	if (!rc)
-		old_pathid = new_pathid;
-	else
-	    goto Error;
+        rc = ioctl(a1010_fd, A1010_SET_CONFIG, &new_pathid);
+        if (!rc)
+            old_pathid = new_pathid;
+        else
+            goto Error;
     }
 
 Error:
@@ -736,8 +736,8 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
     if ( msm72xx_start_acoustic_setting != NULL ) {
         msm72xx_start_acoustic_setting();
     }
-	
-	bool in_call = mMode == AudioSystem::MODE_IN_CALL;
+
+    bool in_call = mMode == AudioSystem::MODE_IN_CALL;
 
     /* If the current device is speaker, then lower the volume before 
      * switching to the new device.
@@ -746,14 +746,14 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
      */
     if ( mCurSndDevice != SND_DEVICE_IDLE ) {
         if (in_call) {
-			LOGI("disabling volume method=VOICE");
-			set_volume_rpc(SND_DEVICE_CURRENT, SND_METHOD_VOICE, 0);
-		}
-		else {
-			LOGI("disabling volume method=AUDIO");
-			set_volume_rpc(SND_DEVICE_CURRENT, SND_METHOD_AUDIO, 0);
+            LOGI("disabling volume method=VOICE");
+            set_volume_rpc(SND_DEVICE_CURRENT, SND_METHOD_VOICE, 0);
+        }
+        else {
+            LOGI("disabling volume method=AUDIO");
+            set_volume_rpc(SND_DEVICE_CURRENT, SND_METHOD_AUDIO, 0);
     	}
-	}
+    }
 
     /* Microphone should be un-muted when recording or during voice call */
     AudioStreamInMSM72xx *input = getActiveInput_l();
@@ -774,29 +774,29 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
     } else {
         inputDevice = input->devices();
         if (inputDevice & AudioSystem::DEVICE_IN_ALL) {
-			LOGI("enabling mic recording");
+            LOGI("enabling mic recording");
             args->mic_mute = false;  
         } else {
-			LOGI("disabling mic recording");
+            LOGI("disabling mic recording");
             args->mic_mute = true;
         }
     }
     
-	/* Redirect output to correct device for specials devices */
+    /* Redirect output to correct device for specials devices */
     if ( (int)args->device == SND_DEVICE_PLAYBACK_HANDSFREE ) {
-		LOGI("redirecting output to SPEAKER");
+        LOGI("redirecting output to SPEAKER");
         args->device = SND_DEVICE_SPEAKER;
     } else if ( (int)args->device == SND_DEVICE_PLAYBACK_HEADSET ) {
-		LOGI("redirecting output to HEADSET");
+        LOGI("redirecting output to HEADSET");
         args->device = SND_DEVICE_HEADSET;
     } else if ( (int)args->device >= BT_CUSTOM_DEVICES_ID_OFFSET ) {
-		LOGI("redirecting output to BT");
+        LOGI("redirecting output to BT");
         args->device = SND_DEVICE_BT;
     }
  
     /* Do not use SND_DEVICE_CURRENT */
     if ( args->device == (unsigned int)SND_DEVICE_CURRENT ) {
-		LOGI("patching device to mCurSndDevice(%d)", mCurSndDevice);
+        LOGI("patching device to mCurSndDevice(%d)", mCurSndDevice);
         args->device = mCurSndDevice;
     }
 
@@ -809,15 +809,15 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
             bEnableOut = true;    
         }
         /* If recording while speaker is in use, then enable dual mic */
-		bool use_mic = inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC;
-		bool rear_mic = inputDevice & AudioSystem::DEVICE_IN_BACK_MIC;
-		bool use_spk = ((int)args->device) == SND_DEVICE_SPEAKER;
+        bool use_mic = inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC;
+        bool rear_mic = inputDevice & AudioSystem::DEVICE_IN_BACK_MIC;
+        bool use_spk = ((int)args->device) == SND_DEVICE_SPEAKER;
 
-		if ((in_call || use_mic || rear_mic) && use_spk) {
+        if ((in_call || use_mic || rear_mic) && use_spk) {
             msm72xx_set_audio_path(!args->mic_mute, 1, args->device, bEnableOut );
             mCurSndDevice = SND_DEVICE_SPEAKER_MIC;
-			args->device = SND_DEVICE_SPEAKER_MIC;
-			LOGI("mCurSndDevice <- SPEAKER_MIC");
+            args->device = SND_DEVICE_SPEAKER_MIC;
+            LOGI("mCurSndDevice <- SPEAKER_MIC");
         } else {
             msm72xx_set_audio_path(!args->mic_mute, 0, args->device, bEnableOut );
         }
