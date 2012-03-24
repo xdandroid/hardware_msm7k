@@ -811,7 +811,7 @@ status_t AudioHardware::doAcousticAudioDeviceChange(struct msm_snd_device_config
         /* If recording while speaker is in use, then enable dual mic */
         bool use_mic = inputDevice & AudioSystem::DEVICE_IN_BUILTIN_MIC;
         bool rear_mic = inputDevice & AudioSystem::DEVICE_IN_BACK_MIC;
-        bool use_spk = ((int)args->device) == SND_DEVICE_SPEAKER;
+        bool use_spk = (((int)args->device) == SND_DEVICE_SPEAKER) || (((int)args->device) == SND_DEVICE_SPEAKER_MIC);
 
         if ((in_call || use_mic || rear_mic) && use_spk) {
             msm72xx_set_audio_path(!args->mic_mute, 1, args->device, bEnableOut );
